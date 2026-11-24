@@ -64,6 +64,7 @@ const REGION_DEFS = [
   ['padang','Padang','SUM',100.35,-1.0,'belanda','kopi',150,'pesisir'],
   ['siak','Siak','SUM',101.9,0.8,'siak','lada',160,'hutan'],
   ['jambi','Jambi','SUM',103.4,-1.7,'jambi','lada',120,'hutan'],
+  ['indragiri','Indragiri','SUM',102.5,-0.45,'indragiri','lada',70,'hutan'],
   ['bengkulu','Bengkulu','SUM',102.4,-3.8,'belanda','lada',90,'pesisir'],
   ['palembang','Palembang','SUM',104.6,-3.0,'belanda','lada',250,'dataran'],
   ['lampung','Lampung','SUM',105.1,-5.1,'adat','lada',100,'hutan'],
@@ -78,36 +79,52 @@ const REGION_DEFS = [
   ['semarang','Semarang','JAV',110.4,-6.95,'belanda','gula',500,'pesisir'],
   ['kedu','Kedu','JAV',110.2,-7.45,'belanda','kopi',350,'pegunungan'],
   ['rembang','Rembang','JAV',111.4,-6.85,'belanda','jati',350,'hutan'],
-  ['yogyakarta','Mataram (Yogyakarta)','JAV',110.36,-7.85,'yogya','gula',450,'dataran'],
+  ['yogyakarta','Mataram (Yogyakarta)','JAV',110.36,-7.8,'yogya','gula',400,'dataran'],
   ['gunungkidul','Gunungkidul','JAV',110.65,-8.0,'yogya','jati',150,'pegunungan'],
-  ['surakarta','Surakarta','JAV',110.85,-7.6,'surakarta','gula',500,'dataran'],
+  ['adikarta','Adikarta','JAV',110.12,-7.92,'pakualaman','beras',40,'pesisir'],
+  ['surakarta','Surakarta','JAV',110.83,-7.57,'surakarta','gula',450,'dataran'],
   ['sukowati','Sukowati','JAV',111.1,-7.4,'surakarta','nila',200,'dataran'],
+  ['wonogiri','Wonogiri (Mangkunegaran)','JAV',110.95,-7.85,'mangkunegaran','beras',180,'pegunungan'],
   ['kediri','Kediri','JAV',112.0,-7.85,'belanda','gula',450,'dataran'],
   ['surabaya','Surabaya','JAV',112.7,-7.35,'belanda','gula',550,'pesisir'],
   ['pasuruan','Pasuruan','JAV',112.9,-7.85,'belanda','kopi',400,'pegunungan'],
   ['besuki','Besuki','JAV',113.9,-7.95,'belanda','tembakau',250,'hutan'],
-  ['madura','Madura','MAD',113.4,-7.05,'belanda','beras',450,'pulau'],
+  ['bangkalan','Bangkalan','MAD',112.95,-7.05,'madura','beras',220,'pulau'],
+  ['sumenep','Sumenep','MAD',113.85,-7.0,'madura','beras',230,'pulau'],
   // Bali dan Nusa Tenggara
-  ['bali','Bali','BALI',115.15,-8.4,'klungkung','beras',600,'pegunungan'],
-  ['lombok','Lombok','LOM',116.3,-8.6,'klungkung','beras',350,'pulau'],
-  ['sumbawa','Sumbawa','SBW',117.4,-8.65,'bima','kuda',80,'pulau'],
+  ['buleleng','Buleleng','BALI',115.05,-8.18,'buleleng','beras',110,'pesisir'],
+  ['jembrana','Jembrana','BALI',114.65,-8.33,'buleleng','hutan',30,'hutan'],
+  ['tabanan','Tabanan','BALI',115.05,-8.45,'tabanan','beras',100,'dataran'],
+  ['mengwi','Mengwi','BALI',115.16,-8.5,'mengwi','beras',80,'dataran'],
+  ['badung','Badung','BALI',115.2,-8.72,'badung','dagang',100,'pesisir'],
+  ['gianyar','Gianyar','BALI',115.28,-8.5,'gianyar','beras',80,'dataran'],
+  ['bangli','Bangli','BALI',115.35,-8.3,'bangli','beras',60,'pegunungan'],
+  ['klungkung','Klungkung','BALI',115.45,-8.56,'klungkung','beras',60,'dataran'],
+  ['karangasem','Karangasem','BALI',115.6,-8.36,'karangasem','beras',110,'pegunungan'],
+  ['nusapenida','Nusa Penida','BALI',115.52,-8.73,'klungkung','hutan',15,'pulau'],
+  ['lombok','Lombok','LOM',116.3,-8.6,'lombok','beras',300,'pulau'],
+  ['sumbawa','Sumbawa','SBW',117.4,-8.65,'sumbawa','kuda',80,'pulau'],
   ['bima','Bima','SBW',118.7,-8.55,'bima','kuda',100,'pulau'],
   ['manggarai','Manggarai','FLO',120.3,-8.6,'bima','hutan',90,'pegunungan'],
+  ['ende','Ende dan Lio','FLO',121.7,-8.75,'adat','hutan',80,'pegunungan'],
   ['larantuka','Larantuka','FLO',122.5,-8.5,'portugis','cendana',60,'pesisir'],
   ['sumba','Sumba','SBA',119.9,-9.65,'adat','kuda',80,'pulau'],
   ['kupang','Kupang','TIM',123.9,-10.0,'belanda','cendana',80,'pesisir'],
+  ['timortengah','Timor Tengah','TIM',124.45,-9.55,'adat','cendana',120,'pegunungan'],
   ['dili','Timor Timur','TIM',125.7,-8.8,'portugis','cendana',150,'pegunungan'],
   // Kalimantan
   ['sabah','Sabah','KAL',116.6,5.4,'brunei','hutan',40,'hutan'],
   ['brunei','Brunei','KAL',114.9,4.6,'brunei','dagang',50,'pesisir'],
   ['sarawak','Sarawak','KAL',111.6,1.8,'brunei','hutan',80,'hutan'],
-  ['sambas','Sambas','KAL',109.35,1.3,'pontianak','emas',60,'pesisir'],
+  ['sambas','Sambas','KAL',109.35,1.3,'sambas','emas',60,'pesisir'],
   ['pontianak','Pontianak','KAL',109.6,-0.2,'pontianak','dagang',90,'pesisir'],
   ['ketapang','Matan (Ketapang)','KAL',110.4,-1.7,'adat','hutan',40,'hutan'],
   ['kapuas','Kapuas Hulu','KAL',112.8,0.6,'adat','hutan',60,'hutan'],
   ['apokayan','Apo Kayan','KAL',115.3,2.4,'adat','hutan',40,'hutan'],
-  ['bulungan','Bulungan','KAL',117.3,2.9,'adat','hutan',30,'pesisir'],
+  ['bulungan','Bulungan','KAL',117.3,3.0,'bulungan','hutan',30,'pesisir'],
+  ['berau','Berau','KAL',117.45,2.1,'berau','hutan',30,'pesisir'],
   ['kutai','Kutai','KAL',116.7,-0.3,'kutai','emas',80,'hutan'],
+  ['paser','Paser','KAL',116.15,-1.85,'pasir','hutan',40,'hutan'],
   ['barito','Barito','KAL',114.2,-1.0,'adat','hutan',70,'hutan'],
   ['kotawaringin','Kotawaringin','KAL',111.6,-2.4,'banjar','hutan',40,'hutan'],
   ['banjarmasin','Banjarmasin','KAL',114.6,-3.3,'banjar','emas',220,'pesisir'],
@@ -123,18 +140,21 @@ const REGION_DEFS = [
   ['luwu','Luwu','SUL',120.4,-2.8,'luwu','emas',120,'hutan'],
   ['ajatappareng','Ajatappareng','SUL',119.7,-3.95,'adat','beras',120,'dataran'],
   ['wajo','Wajo','SUL',120.1,-4.05,'wajo','dagang',180,'dataran'],
-  ['soppeng','Soppeng','SUL',119.85,-4.4,'bone','beras',120,'dataran'],
+  ['soppeng','Soppeng','SUL',119.88,-4.35,'soppeng','beras',120,'dataran'],
   ['bone','Bone','SUL',120.3,-4.6,'bone','dagang',250,'pesisir'],
+  ['sinjai','Sinjai','SUL',120.2,-5.1,'bone','beras',70,'pesisir'],
   ['makassar','Makassar','SUL',119.45,-5.15,'belanda','dagang',120,'pesisir'],
-  ['gowa','Gowa','SUL',119.75,-5.45,'gowa','dagang',220,'dataran'],
-  ['selayar','Selayar','SUL',120.45,-6.1,'gowa','dagang',50,'pulau'],
+  ['gowa','Gowa','SUL',119.72,-5.25,'gowa','dagang',200,'dataran'],
+  ['takalar','Polongbangkeng (Takalar)','SUL',119.45,-5.45,'gowa','beras',90,'dataran'],
+  ['selayar','Selayar','SUL',120.45,-6.1,'belanda','dagang',50,'pulau'],
   ['konawe','Konawe','SUL',122.3,-3.9,'adat','hutan',70,'hutan'],
   ['buton','Buton','SUL',122.65,-5.3,'buton','dagang',90,'pulau'],
   // Maluku
   ['ternate','Ternate','TERN',127.35,0.8,'ternate','rempah',45,'pulau'],
   ['halut','Halmahera Utara','HALM',127.9,1.6,'ternate','rempah',60,'hutan'],
   ['tidore','Tidore','TIDO',127.4,0.67,'tidore','rempah',25,'pulau'],
-  ['halsel','Halmahera Selatan','HALM',127.9,-0.6,'tidore','rempah',30,'hutan'],
+  ['halsel','Halmahera Selatan','HALM',128.1,-0.4,'tidore','rempah',30,'hutan'],
+  ['bacan','Bacan','HALM',127.5,-0.65,'bacan','rempah',25,'pulau'],
   ['sula','Kepulauan Sula','SULA',125.9,-1.9,'ternate','hutan',25,'pulau'],
   ['buru','Buru','BURU',126.6,-3.4,'belanda','hutan',15,'pulau'],
   ['seram','Seram','SERAM',129.5,-3.1,'adat','rempah',50,'hutan'],
@@ -192,43 +212,43 @@ const FACTION_DEFS = {
   aceh:{ name:'Kesultanan Aceh Darussalam', short:'Aceh', color:'#2f8a5b', culture:'aceh', kind:'kerajaan',
     playable:true, unlock:null, capital:'kutaraja', kas:420, army:4200, quality:1.0, rel:{belanda:-5},
     title:'Sultan', bonus:{id:'serambi', n:'Serambi Mekkah', d:'Legitimasi naik setiap tahun dan perang gerilya lebih tangguh.'},
-    blurb:'Kesultanan merdeka di ujung Sumatra. Kaya lada, berani, dan sejak lama dilirik Belanda.' },
+    blurb:'Kesultanan merdeka di ujung Sumatra yang menguasai perdagangan lada. Sultan Muhammad Daud Syah memerintah dengan dukungan adiknya, Tuanku Ibrahim.' },
   yogya:{ name:'Kesultanan Ngayogyakarta Hadiningrat', short:'Yogyakarta', color:'#a65a2a', culture:'jawa', kind:'kerajaan',
     playable:true, unlock:null, capital:'yogyakarta', kas:320, army:1500, quality:0.8, overlord:'belanda', rel:{belanda:25},
     title:'Sri Sultan', regnal:'Hamengkubuwono', startRegnal:5, bonus:{id:'keraton', n:'Keraton Agung', d:'Penduduk padat, wibawa keraton tinggi, tetapi harus membayar upeti kepada Belanda.'},
-    blurb:'Keraton besar yang baru saja melewati Perang Jawa. Berstatus bawahan, wibawanya masih kuat.' },
+    blurb:'Keraton besar yang baru saja melewati Perang Jawa. Sultannya baru berusia 10 tahun, sehingga pemerintahan dijalankan wali raja dan Patih Danurejo IV.' },
   bone:{ name:'Kesultanan Bone', short:'Bone', color:'#c23b32', culture:'bugis', kind:'kerajaan',
     playable:true, unlock:null, capital:'bone', kas:320, army:2600, quality:0.9, rel:{belanda:5},
     title:'Arumpone', bonus:{id:'pelaut', n:'Pelaut Bugis', d:'Jangkauan laut lebih jauh dan penghasilan niaga naik 20 persen.'},
-    blurb:'Kekuatan Bugis di Sulawesi Selatan. Kecil di darat, tetapi armada dagangnya menjangkau seluruh Nusantara.' },
+    blurb:'Kekuatan Bugis di Sulawesi Selatan yang dipimpin seorang ratu, Sultanah Salimah Rajiatuddin. Bersekutu dengan Soppeng dan Wajo, bersaing dengan Gowa.' },
   banjar:{ name:'Kesultanan Banjar', short:'Banjar', color:'#d9a21b', culture:'banjar', kind:'kerajaan',
     playable:true, unlock:{level:2}, capital:'banjarmasin', kas:360, army:2500, quality:0.9, rel:{belanda:10},
     title:'Sultan', bonus:{id:'tambang', n:'Tambang dan Sungai', d:'Emas, intan, dan lada memberi penghasilan 15 persen lebih besar.'},
-    blurb:'Kerajaan sungai di Kalimantan Selatan dengan tambang emas dan intan yang menggiurkan.' },
+    blurb:'Kerajaan sungai di Kalimantan Selatan dengan tambang emas dan intan. Sultan Adam sudah tua, dan para cucunya kelak akan berebut takhta.' },
   klungkung:{ name:'Kerajaan Klungkung', short:'Klungkung', color:'#8a4fb0', culture:'bali', kind:'kerajaan',
-    playable:true, unlock:{badge:'generasi'}, capital:'bali', kas:260, army:3200, quality:0.9, rel:{belanda:0},
-    title:'Dewa Agung', bonus:{id:'puputan', n:'Semangat Puputan', d:'Pertahanan di ibu kota jauh lebih kuat dan legitimasi sulit runtuh.'},
-    blurb:'Penguasa tertinggi raja-raja Bali, juga membawahi Lombok. Penduduknya padat dan setia.' },
+    playable:true, unlock:{badge:'generasi'}, capital:'klungkung', kas:280, army:1600, quality:0.9, rel:{belanda:0},
+    title:'Dewa Agung', regnal:'Putra', startRegnal:2, bonus:{id:'puputan', n:'Semangat Puputan', d:'Pertahanan di ibu kota jauh lebih kuat, legitimasi sulit runtuh, dan raja-raja Bali lain menghormati Dewa Agung.'},
+    blurb:'Kerajaan kecil yang rajanya dihormati sebagai raja tertinggi Bali. Diperintah bersama oleh Dewa Agung Putra II dan kakaknya, Dewa Agung Istri Kanya.' },
   siak:{ name:'Kesultanan Siak Sri Indrapura', short:'Siak', color:'#2a77b4', culture:'melayu', kind:'kerajaan',
     playable:true, unlock:{badge:'saudagar'}, capital:'siak', kas:360, army:1100, quality:0.85, rel:{belanda:10},
     title:'Sultan', bonus:{id:'bandar', n:'Bandar Selat', d:'Dekat dengan Selat Malaka. Semua penghasilan niaga naik 15 persen.'},
-    blurb:'Kesultanan Melayu di tepi Selat Malaka yang juga membawahi Deli.' },
+    blurb:'Kesultanan Melayu di tepi Selat Malaka yang mengklaim Deli sebagai bawahannya. Sultan Syarif Ismail pandai bermain di antara Inggris dan Belanda.' },
   ternate:{ name:'Kesultanan Ternate', short:'Ternate', color:'#169c86', culture:'maluku', kind:'kerajaan',
     playable:true, unlock:{level:3}, capital:'ternate', kas:300, army:900, quality:0.85, rel:{belanda:15},
     title:'Sultan', bonus:{id:'rempah', n:'Kuasa Rempah', d:'Harga rempah lebih tinggi dan jangkauan laut lebih jauh.'},
-    blurb:'Pewaris kejayaan rempah Maluku dengan wilayah yang tersebar di banyak pulau.' },
+    blurb:'Pewaris kejayaan rempah Maluku dengan wilayah yang tersebar dari Halmahera sampai Banggai. Bersaing sejak lama dengan Tidore.' },
   surakarta:{ name:'Kasunanan Surakarta Hadiningrat', short:'Surakarta', color:'#6e4a3a', culture:'jawa', kind:'kerajaan',
     playable:true, unlock:{badge:'dinasti'}, capital:'surakarta', kas:360, army:1500, quality:0.8, overlord:'belanda', rel:{belanda:30},
     title:'Sri Susuhunan', regnal:'Pakubuwono', startRegnal:7, bonus:{id:'diplomasi', n:'Diplomasi Halus', d:'Peluang berhasil dalam diplomasi naik dan hubungan dengan Belanda lebih mudah dijaga.'},
-    blurb:'Saudara tua Yogyakarta. Berstatus bawahan Belanda dan pandai bermain di belakang layar.' },
+    blurb:'Pakubuwono VI baru saja dibuang ke Ambon karena membantu Diponegoro. Pamannya, Pakubuwono VII, naik takhta di bawah pengawasan Belanda.' },
   gowa:{ name:'Kesultanan Gowa', short:'Gowa', color:'#b23a78', culture:'makassar', kind:'kerajaan',
     playable:true, unlock:{badge:'panglima'}, capital:'gowa', kas:300, army:1400, quality:0.9, rel:{belanda:-5},
     title:'Somba', bonus:{id:'benteng', n:'Benteng Makassar', d:'Semua wilayah dimulai dengan benteng tingkat 2.'},
-    blurb:'Bekas kekuatan laut terbesar di timur, kini bertetangga langsung dengan benteng Belanda di Makassar.' },
+    blurb:'Bekas kekuatan laut terbesar di timur, kini bertetangga langsung dengan benteng Belanda di Makassar dan bersaing dengan Bone.' },
   batak:{ name:'Tanah Batak (Sisingamangaraja)', short:'Batak', color:'#4b5aa0', culture:'batak', kind:'kerajaan',
     playable:true, unlock:{level:4}, capital:'batak', kas:160, army:2200, quality:0.85, rel:{belanda:0},
     title:'Raja', regnal:'Sisingamangaraja', startRegnal:11, bonus:{id:'tanahtinggi', n:'Tanah Tinggi', d:'Pegunungan memberi pertahanan tambahan dan Belanda lebih lama melirik wilayah ini.'},
-    blurb:'Pemimpin spiritual dan politik orang Batak di pedalaman Sumatra Utara yang sulit dijangkau.' },
+    blurb:'Raja-pendeta orang Batak di Bakkara. Sisingamangaraja XI baru naik takhta setelah ayahnya gugur diserang kaum Padri.' },
 
   belanda:{ name:'Hindia Belanda', short:'Belanda', color:'#e07b22', culture:null, kind:'kolonial', capital:'batavia' },
   jepang:{ name:'Pendudukan Jepang', short:'Jepang', color:'#d9cfc4', culture:null, kind:'kolonial', capital:'batavia' },
@@ -245,7 +265,114 @@ const FACTION_DEFS = {
   buton:{ name:'Kesultanan Buton', short:'Buton', color:'#5f80a0', culture:'bugis', kind:'kerajaan', capital:'buton', title:'Sultan', overlord:'belanda' },
   tidore:{ name:'Kesultanan Tidore', short:'Tidore', color:'#2b80a1', culture:'maluku', kind:'kerajaan', capital:'tidore', title:'Sultan' },
   bima:{ name:'Kesultanan Bima', short:'Bima', color:'#8f703f', culture:'melayu', kind:'kerajaan', capital:'bima', title:'Sultan' },
+  indragiri:{ name:'Kesultanan Indragiri', short:'Indragiri', color:'#3f8f7f', culture:'melayu', kind:'kerajaan', capital:'indragiri', title:'Sultan' },
+  pakualaman:{ name:'Kadipaten Pakualaman', short:'Pakualaman', color:'#c08a52', culture:'jawa', kind:'kerajaan', capital:'adikarta', title:'Kanjeng Gusti Pangeran Adipati Arya', regnal:'Paku Alam', startRegnal:2, overlord:'belanda' },
+  mangkunegaran:{ name:'Kadipaten Mangkunegaran', short:'Mangkunegaran', color:'#8b5a3c', culture:'jawa', kind:'kerajaan', capital:'wonogiri', title:'Kanjeng Gusti Pangeran Adipati Arya', regnal:'Mangkunegara', startRegnal:2, overlord:'belanda' },
+  madura:{ name:'Kerajaan-kerajaan Madura', short:'Madura', color:'#a8874a', culture:'jawa', kind:'kerajaan', capital:'sumenep', title:'Panembahan', overlord:'belanda' },
+  buleleng:{ name:'Kerajaan Buleleng', short:'Buleleng', color:'#5e4fa8', culture:'bali', kind:'kerajaan', capital:'buleleng', title:'Raja' },
+  karangasem:{ name:'Kerajaan Karangasem', short:'Karangasem', color:'#b05c9e', culture:'bali', kind:'kerajaan', capital:'karangasem', title:'Raja' },
+  badung:{ name:'Kerajaan Badung', short:'Badung', color:'#c27ba0', culture:'bali', kind:'kerajaan', capital:'badung', title:'Raja' },
+  tabanan:{ name:'Kerajaan Tabanan', short:'Tabanan', color:'#7a5c8e', culture:'bali', kind:'kerajaan', capital:'tabanan', title:'Raja' },
+  mengwi:{ name:'Kerajaan Mengwi', short:'Mengwi', color:'#6f6aa8', culture:'bali', kind:'kerajaan', capital:'mengwi', title:'Raja' },
+  gianyar:{ name:'Kerajaan Gianyar', short:'Gianyar', color:'#9e6fc9', culture:'bali', kind:'kerajaan', capital:'gianyar', title:'Raja' },
+  bangli:{ name:'Kerajaan Bangli', short:'Bangli', color:'#a7849f', culture:'bali', kind:'kerajaan', capital:'bangli', title:'Raja' },
+  lombok:{ name:'Kerajaan Mataram Lombok', short:'Mataram Lombok', color:'#4f7d9e', culture:'bali', kind:'kerajaan', capital:'lombok', title:'Raja' },
+  sumbawa:{ name:'Kesultanan Sumbawa', short:'Sumbawa', color:'#9a7f55', culture:'melayu', kind:'kerajaan', capital:'sumbawa', title:'Sultan' },
+  sambas:{ name:'Kesultanan Sambas', short:'Sambas', color:'#a58d3c', culture:'melayu', kind:'kerajaan', capital:'sambas', title:'Sultan' },
+  pasir:{ name:'Kesultanan Paser', short:'Paser', color:'#6e8f5a', culture:'banjar', kind:'kerajaan', capital:'paser', title:'Sultan' },
+  berau:{ name:'Kesultanan Berau', short:'Berau', color:'#5a8a8a', culture:'melayu', kind:'kerajaan', capital:'berau', title:'Sultan' },
+  bulungan:{ name:'Kesultanan Bulungan', short:'Bulungan', color:'#8a9a4a', culture:'melayu', kind:'kerajaan', capital:'bulungan', title:'Sultan' },
+  soppeng:{ name:'Kedatuan Soppeng', short:'Soppeng', color:'#b5524a', culture:'bugis', kind:'kerajaan', capital:'soppeng', title:'Datu' },
+  bacan:{ name:'Kesultanan Bacan', short:'Bacan', color:'#3f9aa8', culture:'maluku', kind:'kerajaan', capital:'bacan', title:'Sultan' },
   adat:{ name:'Wilayah adat', short:'Wilayah adat', color:'#c8bfa6', culture:null, kind:'adat' }
+};
+
+/* Hubungan antarkerajaan pada 1830 (-100 sampai 100). Angka negatif yang besar bisa memicu perang antartetangga.
+   Disusun dari persaingan dan persekutuan yang tercatat, misalnya persekutuan Tellumpoccoe (Bone, Soppeng, Wajo),
+   persaingan Bone dan Gowa, Ternate dan Tidore, serta serangan kaum Padri ke Tanah Batak. */
+const RELATIONS = [
+  ['aceh','siak',-15],['aceh','batak',-10],['minang','batak',-35],['siak','indragiri',5],['riau','indragiri',20],['siak','riau',10],
+  ['yogya','surakarta',0],['yogya','pakualaman',-10],['surakarta','mangkunegaran',-15],['yogya','mangkunegaran',-5],
+  ['klungkung','gianyar',-25],['klungkung','karangasem',15],['klungkung','badung',25],['klungkung','bangli',10],['klungkung','tabanan',10],
+  ['karangasem','buleleng',45],['karangasem','lombok',30],['badung','mengwi',-25],['tabanan','mengwi',-20],['gianyar','bangli',-30],['badung','tabanan',15],
+  ['bima','sumbawa',-10],
+  ['banjar','kutai',10],['banjar','pasir',15],['kutai','berau',-10],['berau','bulungan',-25],['sambas','pontianak',-20],['brunei','sambas',0],
+  ['bone','gowa',-30],['bone','soppeng',45],['bone','wajo',30],['soppeng','wajo',30],['bone','luwu',-15],['wajo','luwu',10],['gowa','buton',-10],
+  ['ternate','tidore',-30],['ternate','bacan',15],['tidore','bacan',-15]
+];
+
+/* Gubernur Jenderal Hindia Belanda (tahun mulai menjabat) */
+const GOVERNORS = [
+  [1830,'Johannes van den Bosch'],[1833,'Jean Chrétien Baud'],[1836,'Dominique Jacques de Eerens'],[1841,'Pieter Merkus'],[1845,'Jan Jacob Rochussen'],
+  [1851,'Albertus Jacobus Duymaer van Twist'],[1856,'Charles Ferdinand Pahud'],[1861,'Ludolph Anne Jan Wilt Sloet van de Beele'],[1866,'Pieter Mijer'],
+  [1872,'James Loudon'],[1875,'Johan Wilhelm van Lansberge'],[1881,"Frederik s'Jacob"],[1884,'Otto van Rees'],[1888,'Cornelis Pijnacker Hordijk'],
+  [1893,'Carel Herman Aart van der Wijck'],[1899,'Willem Rooseboom'],[1904,'Joannes Benedictus van Heutsz'],[1909,'Alexander Willem Frederik Idenburg'],
+  [1916,'Johan Paul van Limburg Stirum'],[1921,'Dirk Fock'],[1926,'Andries Cornelis Dirk de Graeff'],[1931,'Bonifacius Cornelis de Jonge'],
+  [1936,'Alidius Warmoldus Lambertus Tjarda van Starkenborgh Stachouwer']
+];
+
+/* Penguasa kerajaan lain pada 1830 (hanya nama di layar diplomasi). Kerajaan yang tidak tercantum memakai nama rekaan. */
+const AI_RULERS_1830 = {
+  pontianak:'Sultan Syarif Usman', brunei:'Sultan Omar Ali Saifuddin II', bima:'Sultan Ismail Muhammad Syah', buton:'Sultan Muhammad Idrus Kaimuddin',
+  riau:'Sultan Abdul Rahman Muazzam Syah', minang:'Tuanku Imam Bonjol', kutai:'Sultan Aji Muhammad Salehuddin', sambas:'Sultan Abubakar Tajuddin I'
+};
+
+/* Tokoh sejarah di istana kerajaan yang bisa dimainkan.
+   b: tahun lahir, bp: tahun lahir berupa perkiraan, hd: tahun wafat menurut sejarah (bisa bergeser sedikit dalam permainan),
+   ruler: penguasa pada 1830, heir: pewaris yang ditetapkan, spOf: pasangan dari tokoh lain, par: orang tua, born: lahir setelah 1830,
+   role: peran di dewan (panglima, patih, duta), noble: bangsawan (bukan wangsa), full: nama lengkap untuk ditampilkan. */
+const HIST_CHARS = {
+  aceh: [
+    { key:'daud', n:'Alauddin Muhammad Daud Syah', g:'L', b:1800, bp:true, hd:1838, ruler:true, mil:5, dip:6, adm:5, tr:['saleh'] },
+    { key:'ibrahim', n:'Ibrahim', full:'Tuanku Ibrahim', g:'L', b:1805, bp:true, hd:1870, mil:7, dip:7, adm:6, tr:['cakap_perang','cerdik'], role:'panglima' },
+    { key:'sulaiman', n:'Sulaiman', full:'Tuanku Sulaiman', g:'L', b:1836, bp:true, hd:1857, par:'daud', born:true, heir:true },
+    { n:'Panglima Polem', full:'Panglima Polem (panglima sagi XXII Mukim)', g:'L', b:1790, bp:true, noble:true, mil:7, dip:4, adm:5, tr:['pemberani'] }
+  ],
+  yogya: [
+    { key:'hb5', n:'Gathot Menol', g:'L', b:1820, hd:1855, ruler:true, mil:4, dip:6, adm:5, tr:['cerdik'] },
+    { key:'kencono', n:'Kencono', full:'Gusti Kanjeng Ratu Kencono (ibu suri)', g:'P', b:1800, bp:true, hd:1859, mil:3, dip:7, adm:6, tr:['berwibawa'] },
+    { key:'mustojo', n:'Mustojo', full:'Gusti Raden Mas Mustojo', g:'L', b:1821, hd:1877, heir:true, mil:5, dip:5, adm:6, tr:['cermat'] },
+    { n:'Danurejo IV', full:'Kanjeng Raden Adipati Danurejo IV', g:'L', b:1790, bp:true, hd:1847, noble:true, role:'patih', mil:3, dip:6, adm:7, tr:['cermat'] },
+    { n:'Mangkubumi', full:'Gusti Pangeran Haryo Mangkubumi', g:'L', b:1785, bp:true, noble:true, role:'duta', mil:5, dip:6, adm:5, tr:['berwibawa'] }
+  ],
+  bone: [
+    { key:'salimah', n:'We Imaniratu Arung Data', full:'Sultanah Salimah Rajiatuddin (We Imaniratu Arung Data)', g:'P', b:1780, bp:true, hd:1835, ruler:true, mil:5, dip:6, adm:6, tr:['berwibawa'] },
+    { key:'mappaseling', n:'La Mappaseling Arung Panynyili', g:'L', b:1790, bp:true, hd:1845, heir:true, mil:6, dip:5, adm:5, tr:['pemberani'], role:'panglima' },
+    { key:'parenrengi', n:'La Parenrengi Arung Pugi', g:'L', b:1810, bp:true, hd:1857, mil:5, dip:6, adm:6, tr:['cerdik'] },
+    { n:'We Tenriawaru Besse Kajuara', g:'P', b:1815, bp:true, hd:1871, spOf:'parenrengi', mil:7, dip:5, adm:5, tr:['pemberani'] }
+  ],
+  banjar: [
+    { key:'adam', n:'Adam', full:'Sultan Adam al-Watsiq Billah', g:'L', b:1785, bp:true, hd:1857, ruler:true, mil:5, dip:6, adm:7, tr:['saleh','cermat'] },
+    { key:'abdurrahman', n:'Abdurrahman', full:'Sultan Muda Abdurrahman', g:'L', b:1805, bp:true, hd:1852, par:'adam', heir:true, mil:4, dip:5, adm:5, tr:[] },
+    { n:'Tamjidillah', full:'Pangeran Tamjidillah', g:'L', b:1817, hd:1867, par:'abdurrahman', mil:4, dip:6, adm:5, tr:['serakah'] },
+    { n:'Hidayatullah', full:'Pangeran Hidayatullah', g:'L', b:1822, hd:1904, par:'abdurrahman', mil:6, dip:6, adm:6, tr:['berwibawa'] },
+    { n:'Antasari', full:'Pangeran Antasari', g:'L', b:1809, hd:1862, noble:true, role:'panglima', mil:8, dip:6, adm:5, tr:['pemberani','cakap_perang'] }
+  ],
+  ternate: [
+    { key:'zain', n:'Muhammad Zain', g:'L', b:1769, hd:1859, ruler:true, mil:4, dip:6, adm:5, tr:['saleh'] },
+    { n:'Muhammad Arsyad', full:'Kaicil Muhammad Arsyad', g:'L', b:1810, bp:true, hd:1876, par:'zain', heir:true, mil:5, dip:5, adm:5, tr:[] }
+  ],
+  batak: [
+    { key:'sohahuaon', n:'Ompu Sohahuaon', g:'L', b:1800, bp:true, hd:1867, ruler:true, mil:6, dip:6, adm:5, tr:['berwibawa'] },
+    { n:'Patuan Bosar', full:'Patuan Bosar Ompu Pulo Batu', g:'L', b:1845, hd:1907, par:'sohahuaon', born:true, heir:true, mil:8, dip:6, adm:5, tr:['pemberani'] }
+  ],
+  klungkung: [
+    { key:'putra2', n:'Putra', g:'L', b:1800, bp:true, hd:1850, ruler:true, mil:5, dip:6, adm:5, tr:['saleh'] },
+    { n:'Istri Kanya', full:'Dewa Agung Istri Kanya', g:'P', b:1795, bp:true, hd:1868, role:'panglima', mil:8, dip:6, adm:6, tr:['pemberani','berwibawa'] }
+  ],
+  siak: [
+    { key:'ismail', n:'Syarif Ismail', full:'Sultan Assyaidis Syarif Ismail Abdul Jalil Syaifuddin', g:'L', b:1800, bp:true, hd:1864, ruler:true, mil:4, dip:7, adm:6, tr:['cerdik'] },
+    { n:'Syarif Kasim', full:'Tengku Syarif Kasim', g:'L', b:1835, bp:true, hd:1889, par:'ismail', born:true, heir:true, mil:5, dip:6, adm:6, tr:[] }
+  ],
+  gowa: [
+    { key:'kumala', n:'I Kumala Karaeng Lembangparang', full:'Sultan Abdul Kadir Muhammad Aidid (I Kumala Karaeng Lembangparang)', g:'L', b:1805, bp:true, hd:1893, ruler:true, mil:6, dip:5, adm:6, tr:['berwibawa'] }
+  ],
+  surakarta: [
+    { key:'pb7', n:'Malikis Solikin', g:'L', b:1796, hd:1858, ruler:true, mil:3, dip:7, adm:6, tr:['cerdik'] },
+    { key:'kuseini', n:'Kuseini', full:'Gusti Raden Mas Kuseini', g:'L', b:1789, hd:1861, heir:true, mil:4, dip:6, adm:5, tr:[] },
+    { n:'Duksino', full:'Raden Mas Duksino (putra Pakubuwono VI)', g:'L', b:1830, hd:1893, born:true, bm:12, mil:5, dip:6, adm:6, tr:['berwibawa'] },
+    { n:'Sasradiningrat II', full:'Kanjeng Raden Adipati Sasradiningrat II', g:'L', b:1780, bp:true, hd:1846, noble:true, role:'patih', mil:3, dip:6, adm:7, tr:['cermat'] }
+  ]
 };
 
 const PLAYABLE_ORDER = ['aceh','yogya','bone','banjar','ternate','batak','klungkung','siak','gowa','surakarta'];

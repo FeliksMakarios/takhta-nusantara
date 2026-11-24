@@ -58,6 +58,7 @@ function toast(msg, good){
   if (!msg) return;
   const el = document.createElement('div'); el.className = 'toast' + (good ? ' good' : ''); el.textContent = msg;
   const box = document.getElementById('toasts'); box.appendChild(el);
+  while (box.children.length > 3) box.firstChild.remove();
   setTimeout(() => el.classList.add('out'), 3400); setTimeout(() => el.remove(), 3900);
 }
 
@@ -343,6 +344,11 @@ const MV = {
 /* ---------- layar awal ---------- */
 function showStart(){ document.getElementById('game').hidden = true; document.getElementById('start').hidden = false; renderStart(); window.scrollTo(0, 0); }
 function secOpen(id, def){ const s = LS.get('tn_sec') || {}; return s[id] ?? def; }
+function ruler1830(fid){
+  const h = (HIST_CHARS[fid] || []).find(x => x.ruler); if (!h) return '';
+  const d = D(fid), title = d.regnal ? `${d.title} ${d.regnal} ${roman(d.startRegnal)}` : `${h.g === 'P' && d.title === 'Sultan' ? 'Sultanah' : d.title} ${h.n}`;
+  return `${title}, ${1830 - h.b} tahun${h.bp ? ' (perkiraan)' : ''}`;
+}
 function kingdomCard(fid){
   const d = D(fid), open = isUnlocked(fid);
   const regs = REGION_DEFS.filter(r => r[5] === fid);
@@ -350,6 +356,7 @@ function kingdomCard(fid){
     <div class="kband"></div>
     <div class="kin">
       <h4>${esc(d.name)}</h4>
+      ${ruler1830(fid) ? `<div class="kruler">Penguasa 1830: ${esc(ruler1830(fid))}</div>` : ''}
       <p>${esc(d.blurb)}</p>
       <dl class="kfacts"><div><dt>Wilayah</dt><dd>${regs.length}</dd></div><div><dt>Prajurit</dt><dd>${fmt(d.army)}</dd></div><div><dt>Kas</dt><dd>${fmt(d.kas)}</dd></div></dl>
       <p class="kbonus"><b>${esc(d.bonus.n)}.</b> ${esc(d.bonus.d)}</p>
@@ -389,7 +396,7 @@ function renderStart(){
             <p>Di luar Jawa, ratusan kerajaan masih berdiri. Kesultanan Aceh menguasai jalur lada di ujung Sumatra. Para arumpone Bone memimpin armada Bugis yang berlayar sampai Singapura. Dewa Agung Klungkung masih dihormati sebagai raja tertinggi Bali. Sultan-sultan Ternate dan Tidore mewarisi kejayaan rempah yang dulu diperebutkan bangsa-bangsa Eropa.</p>
             <p>Satu abad ke depan, satu per satu kerajaan itu akan diuji. Ada yang memilih berunding, ada yang bertempur sampai titik darah penghabisan, ada yang bertahan dengan siasat. Kapal uap, senapan baru, dan perjanjian pendek membuat Belanda makin kuat dari tahun ke tahun. Namun dari sekolah-sekolah dan surau, tumbuh gagasan baru tentang satu bangsa yang kelak bernama Indonesia.</p>
             <p>Dalam <b>Takhta Nusantara</b>, kamu memegang takhta salah satu kerajaan itu dari 1 Januari 1830 sampai 17 Agustus 1945. Bangun negerimu, jaga wangsamu dari perebutan takhta, pilih kawan dan lawan, dan tentukan sendiri bagaimana kerajaanmu menyambut fajar kemerdekaan.</p>
-            <p class="small">Peristiwa besar dalam permainan ini diambil dari sejarah. Begitu kamu mengambil keputusan, jalan cerita bisa berbeda dari sejarah yang sebenarnya.</p>
+            <p class="small">Peristiwa besar dan penguasa tahun 1830 diambil dari catatan sejarah. Sebagian tahun lahir hanya perkiraan dan ditandai begitu di dalam permainan. Keturunan yang lahir selama permainan adalah tokoh rekaan dengan nama yang sesuai budaya daerahnya. Begitu kamu mengambil keputusan, jalan cerita bisa berbeda dari sejarah yang sebenarnya.</p>
           </div>
         </details>
         <details class="sec" data-sec="cara" ${secOpen('cara', false) ? 'open' : ''}>
@@ -543,7 +550,7 @@ function tabWilayah(){
 
 function personCard(c, role){
   if (!c) return '';
-  return `<div class="person"><div class="pn">${esc(charName(c))}</div><div class="pr">${esc(role)}, ${age(c)} tahun</div>
+  return `<div class="person"><div class="pn">${esc(charName(c))}${c.hist ? ' <span class="chip gold">Tokoh sejarah</span>' : ''}</div><div class="pr">${esc(role)}, ${age(c)} tahun${c.bp ? ' (tahun lahir perkiraan)' : ''}${c.full && P().ruler === c.id ? `. ${esc(c.full)}` : ''}</div>
     <div class="pstats"><span title="Kepemimpinan perang">Perang ${stat(c, 'mil')}</span><span title="Diplomasi">Diplomasi ${stat(c, 'dip')}</span><span title="Tata kelola">Kelola ${stat(c, 'adm')}</span></div>
     ${c.tr.length ? `<div class="traits">${c.tr.map(t => `<span class="chip ${GOOD_TRAITS.includes(t) ? 'ok' : 'warn'}" title="${esc(TRAITS[t].d)}">${esc(TRAITS[t].n)}</span>`).join('')}</div>` : ''}</div>`;
 }
@@ -555,15 +562,15 @@ function tabIstana(){
     const a = age(c);
     const edu = (a >= 6 && a < 16) ? `<label class="small">Pendidikan <select data-c="edu:${c.id}"><option value="">Belum dipilih</option>
       ${[['agama','Pesantren dan agama'],['militer','Keprajuritan'],['praja','Tata praja'],['eropa','Sekolah Belanda']].map(([v, n]) => `<option value="${v}" ${c.edu === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>` : '';
-    const can = a >= 15 && a <= 32 && !c.sp;
-    return `<li><div><b>${esc(charName(c))}</b> <span class="small">${c.g === 'L' ? 'laki-laki' : 'perempuan'}, ${a} tahun${c.sp && CH(c.sp)?.alive ? ', menikah' : ''}</span></div>
+    const can = a >= 15 && a <= 32 && !c.sp && !c.hist;
+    return `<li><div><b>${esc(charName(c))}</b>${c.hist ? ' <span class="chip gold">Tokoh sejarah</span>' : ''} <span class="small">${c.g === 'L' ? 'laki-laki' : 'perempuan'}, ${a} tahun${c.bp ? ' (perkiraan)' : ''}${c.sp && CH(c.sp)?.alive ? ', menikah' : ''}</span></div>
       ${c.tr.length ? `<div class="traits">${c.tr.map(t => `<span class="chip ${GOOD_TRAITS.includes(t) ? 'ok' : 'warn'}">${esc(TRAITS[t].n)}</span>`).join('')}</div>` : ''}
       ${edu}${can ? `<button class="btn sm ghost" data-a="marryOpen:${c.id}">Jodohkan</button>` : ''}</li>`;
   }).join('');
   const cands = councilCandidates();
   const seat = (k, label, st) => `<div class="seat"><div class="sl">${label}</div><select data-c="seat:${k}"><option value="">Kosong</option>
     ${cands.map(c => `<option value="${c.id}" ${f.council[k] === c.id ? 'selected' : ''}>${esc(charName(c))} (${st} ${stat(c, st === 'Perang' ? 'mil' : st === 'Kelola' ? 'adm' : 'dip')})</option>`).join('')}</select></div>`;
-  const nob = nobles().sort((a, b) => a.loy - b.loy).map(c => `<li><span>${esc(charName(c))} <span class="small">${age(c)} tahun</span></span><span class="loy">${Math.round(c.loy)} ${bar(c.loy, c.loy < 25 ? 'red' : 'gold')}</span></li>`).join('');
+  const nob = nobles().sort((a, b) => a.loy - b.loy).map(c => `<li><span>${esc(charName(c))}${c.hist ? ' <span class="chip gold">Tokoh sejarah</span>' : ''} <span class="small">${age(c)} tahun</span></span><span class="loy">${Math.round(c.loy)} ${bar(c.loy, c.loy < 25 ? 'red' : 'gold')}</span></li>`).join('');
   return `<section class="card">
       <h3>Penguasa</h3>
       ${personCard(r, 'Penguasa')}
@@ -583,7 +590,7 @@ function tabDiplomasi(){
   const f = P();
   const B = G.japan ? 'jepang' : 'belanda';
   const rb = Math.round(G.rel[B] ?? 0);
-  let bel = `<section class="card colonial"><div class="rhead"><h2>${esc(D(B).name)}</h2><span class="chip">Hubungan ${rb}</span></div>${bar((rb + 100) / 2, rb < 0 ? 'red' : 'gold')}`;
+  let bel = `<section class="card colonial"><div class="rhead"><h2>${esc(D(B).name)}</h2><span class="chip">Hubungan ${rb}</span></div>${!G.japan ? `<p class="small">Gubernur Jenderal: ${esc(governor())}</p>` : ''}${bar((rb + 100) / 2, rb < 0 ? 'red' : 'gold')}`;
   if (atWarWith(B)) {
     const w = warWith(B);
     bel += `<p class="small">Perang sedang berlangsung. Kelelahan perang di pihak Belanda: ${Math.round(w.exh)} dari 100. Bila mencapai 100, mereka akan meminta damai.</p><div class="acts">${actRow('Ajukan perundingan damai', 'Belanda baru mau berunding bila kelelahan perang mereka tinggi.', null, 'peace:' + B, false, `${WIBAWA.peace} wibawa`)}</div>`;
@@ -606,7 +613,8 @@ function tabDiplomasi(){
         <div class="drow"><span class="chip ${war ? 'danger' : al ? 'ok' : ''}">${war ? 'Perang' : al ? 'Sekutu' : 'Hubungan ' + rel}</span>
         ${war ? `<button class="btn sm" data-a="peace:${x}">Ajukan damai</button>` : `<button class="btn sm ghost" data-a="gift:${x}">Hadiah ${COST.gift()} f</button>${!al ? `<button class="btn sm ghost" data-a="ally:${x}" ${rel < 40 ? 'disabled' : ''}>Bersekutu</button>` : ''}<button class="btn sm ghost danger" data-a="warAsk:${x}" ${isVassal() || ov ? 'disabled' : ''}>Perang</button>`}</div></li>`;
     }).join('');
-  return bel + `<section class="card"><h3>Kerajaan Nusantara</h3><p class="small">Hadiah memakai ${WIBAWA.gift} wibawa, ajakan bersekutu ${WIBAWA.ally}, pernyataan perang ${WIBAWA.war}. Persekutuan butuh hubungan minimal 40. Kerajaan bawahan Belanda tidak bisa diserang.</p><ul class="diplist">${list}</ul></section>`;
+  const aw = (G.aiwars || []).map(w => `<li>${esc(D(w.a).short)} melawan ${esc(D(w.b).short)}, sejak ${w.start}</li>`).join('');
+  return bel + (aw ? `<section class="card"><h3>Perang antarkerajaan</h3><ul class="report">${aw}</ul></section>` : '') + `<section class="card"><h3>Kerajaan Nusantara</h3><p class="small">Hadiah memakai ${WIBAWA.gift} wibawa, ajakan bersekutu ${WIBAWA.ally}, pernyataan perang ${WIBAWA.war}. Persekutuan butuh hubungan minimal 40. Kerajaan bawahan Belanda tidak bisa diserang.</p><ul class="diplist">${list}</ul></section>`;
 }
 
 function tabMiliter(){
