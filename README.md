@@ -6,6 +6,8 @@ Gim strategi 2D berbasis peramban. Pemain memimpin sebuah kerajaan Nusantara dar
 
 Buka `index.html` di peramban, atau kunjungi versi daringnya di GitHub Pages. Tidak perlu memasang apa pun.
 
+Waktu berjalan sendiri, satu minggu demi satu minggu, dari 1 Januari 1830 sampai 17 Agustus 1945. Tekan spasi untuk jeda, dan tombol 1, 2, atau 3 untuk mengatur kecepatan. Setiap tindakan memakai wibawa, dan pembangunan butuh waktu berbulan-bulan dengan biaya yang dicicil.
+
 ## Isi repositori
 
 - `index.html`: tampilan dan gaya halaman
