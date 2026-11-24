@@ -165,6 +165,7 @@ function newGame(fid){
   G.t = 0; G.month = 0; G.wib = 24; G.proj = []; G.speed = 0; G.ownVer = 0;
   G.sel = P().cap;
   G.flags.h_sambutan = 1; G.queue.push({ ev: 'sambutan', ctx: {} });
+  if (typeof ensureArmies === 'function') ensureArmies();
   log(`${charName(rulerC())} memulai pemerintahannya atas ${pd.name}.`, 'penting');
 }
 
@@ -404,39 +405,6 @@ function setOwner(rid, fid){
   }
 }
 
-function playerAttack(rid, pct){
-  const f = P(), R = G.reg[rid], owner = R.owner;
-  const n = Math.round(f.army * pct);
-  if (n < 100) { toast('Pasukan terlalu sedikit untuk menyerang.'); return null; }
-  if (!spend(0, WIBAWA.attack)) return null;
-  const g = garrisonOf(rid);
-  const dm = TERRAIN[RD(rid).ter].def * (1 + 0.3 * R.fort);
-  const w = warWith(owner), h = allyHelp(w, 0.2);
-  const total = n + h.n, q = (n * f.quality + h.n * h.q) / Math.max(1, total);
-  const res = fight(total, q, battleMod(), g.n, g.q, dm);
-  f.army = Math.max(0, f.army - Math.round(res.aLoss * n / Math.max(1, total)));
-  spreadAllyLoss(h, 0.2, res.aLoss, total);
-  if (owner !== 'adat' && G.fac[owner]) G.fac[owner].army = Math.max(0, G.fac[owner].army - Math.round(res.dLoss * 0.6));
-  let msg;
-  if (res.win) {
-    G.stats.wins++; if (w) w.wins++;
-    setOwner(rid, G.player); R.stab = 30; R.occ = 48; G.stats.conquests++;
-    aggression(owner === 'adat' ? 4 : owner === 'belanda' || owner === 'jepang' ? 2 : 15);
-    addLegit(3);
-    if (owner === 'belanda' && w) w.exh += 18;
-    if (owner !== 'belanda' && owner !== 'jepang') addRel('belanda', owner === 'adat' ? -3 : -10);
-    msg = `Kemenangan! ${RD(rid).name} kini menjadi milik kerajaan.${h.n ? ` Pasukan sekutu (${h.list.map(a => D(a).short).join(', ')}) ikut bertempur.` : ''} Pasukan gabungan kehilangan ${fmt(res.aLoss)} orang, musuh kehilangan ${fmt(res.dLoss)}.`;
-    log(`Pasukan kerajaan merebut ${RD(rid).name} dari ${facName(owner)}.`, 'baik');
-  } else {
-    G.stats.losses++; if (w) w.losses++;
-    addLegit(-3);
-    msg = `Serangan ke ${RD(rid).name} gagal.${h.n ? ` Pasukan sekutu ikut bertempur.` : ''} Pasukan gabungan kehilangan ${fmt(res.aLoss)} orang, musuh kehilangan ${fmt(res.dLoss)}.`;
-    log(`Serangan ke ${RD(rid).name} dipukul mundur.`, 'buruk');
-  }
-  checkBadges();
-  return { win: res.win, msg };
-}
-
 /* ---------- perang dan damai ---------- */
 function startWar(fid, kind, opts){
   opts = opts || {};
@@ -448,6 +416,7 @@ function startWar(fid, kind, opts){
   G.trade = G.trade.filter(a => a !== fid);
   if (fid === 'belanda') G.rel.belanda = Math.min(G.rel.belanda, -60); else addRel(fid, -60);
   log(`Perang pecah melawan ${D(fid).name}.`, 'buruk');
+  if (fid !== 'jepang') spawnEnemyArmy(w);
   if (opts.noCall) return;
   const { joined, refused } = callAllies(w);
   const foes = opts.noEnemyAllies ? [] : enemyAlliesJoin(fid);
@@ -460,6 +429,7 @@ function startWar(fid, kind, opts){
   else if (parts.length) log(parts.join(' '), 'penting');
 }
 function endWar(fid, text){
+  clearWarArmies(fid);
   const w0 = warWith(fid);
   if (w0) for (const a of (w0.allies || [])) addRel(a, 15);
   G.wars = G.wars.filter(w => w.enemy !== fid);
@@ -715,66 +685,7 @@ function processAIConflicts(){
 
 function notice(title, text){ G.queue.push({ ev: 'kabar', ctx: { title, text } }); }
 
-function processWars(){
-  for (const w of G.wars.slice()) {
-    G.stats.monthsAtWar = (G.stats.monthsAtWar || 0) + 1;
-    if (w.enemy === 'belanda') {
-      const B = G.fac.belanda;
-      const perYear = w.commit >= 1.75 ? 2 : 1; let lost = false;
-      if (chance(perYear / 12)) {
-        const mine = myRegions(); if (!mine.length) continue;
-        const target = mine.slice().sort((a, b) => nearestHostile(a, 'belanda') - nearestHostile(b, 'belanda') || (a === P().cap) - (b === P().cap))[0];
-        const E = Math.round((expSize() * 0.7 + P().army * 0.5) * w.commit);
-        const res = defendRegion(target, E, B.quality, w);
-        B.army = Math.max(4000, B.army - Math.round(res.aLoss * 0.5));
-        w.exh += res.aLoss / 300;
-        if (res.win && G.reg[target].fort > 0) {
-          G.reg[target].fort--; w.losses++; G.stats.losses++; addLegit(-2); lost = true;
-          log(`Pasukan Belanda (${fmt(E)} serdadu) menggempur benteng ${RD(target).name}. Benteng runtuh satu tingkat. Kita kehilangan ${fmt(res.dLoss)} orang.`, 'buruk');
-          toast(`Benteng ${RD(target).name} digempur Belanda.`);
-        } else if (res.win) {
-          setOwner(target, 'belanda'); w.losses++; G.stats.losses++; addLegit(-6); lost = true;
-          log(`Belanda merebut ${RD(target).name}.`, 'buruk');
-          if (!G.over) notice(`${RD(target).name} jatuh`, `Pasukan Belanda berkekuatan ${fmt(E)} serdadu merebut ${RD(target).name}. Kita kehilangan ${fmt(res.dLoss)} orang dalam pertempuran.`);
-        } else {
-          w.wins++; G.stats.wins++; w.exh += 14 + res.aLoss / 250; addLegit(4);
-          log(`Serangan Belanda (${fmt(E)} serdadu) ke ${RD(target).name} dipatahkan. Musuh kehilangan ${fmt(res.aLoss)} orang.`, 'baik');
-          toast(`Serangan Belanda di ${RD(target).name} dipatahkan.`, true);
-        }
-      }
-      w.exh += (9 + (G.mode === 'gerilya' ? 9 : 0) + (w.allies || []).filter(alive).length * 6) / 12;
-      w.commit = Math.min(2.4, w.commit + 0.015);
-      if (G.over) return;
-      if (w.exh >= 100 && !G.queue.some(q => q.ev === 'damaibelanda')) G.queue.push({ ev: 'damaibelanda', ctx: {} });
-      else if (lost && (myRegions().length <= 2 || w.losses >= 3) && !G.queue.some(q => q.ev === 'tawaranmenyerah')) G.queue.push({ ev: 'tawaranmenyerah', ctx: {} });
-    } else if (w.enemy === 'jepang') {
-      // tidak ada pertempuran aktif melawan Jepang
-    } else {
-      const E = G.fac[w.enemy];
-      if (!alive(w.enemy)) { endWar(w.enemy, `Perang dengan ${D(w.enemy).name} berakhir karena musuh tidak lagi berdiri.`); continue; }
-      if (E.army > 600 && chance(0.55 / 12)) {
-        const mine = myRegions();
-        const target = mine.slice().sort((a, b) => nearestHostile(a, w.enemy) - nearestHostile(b, w.enemy))[0];
-        const n = Math.round(E.army * 0.6);
-        const res = defendRegion(target, n, E.quality, w);
-        E.army = Math.max(0, E.army - res.aLoss);
-        if (res.win) { setOwner(target, w.enemy); w.losses++; G.stats.losses++; addLegit(-5); log(`${D(w.enemy).short} merebut ${RD(target).name}.`, 'buruk'); if (!G.over) notice(`${RD(target).name} jatuh`, `Pasukan ${D(w.enemy).name} merebut ${RD(target).name}.`); }
-        else { w.wins++; G.stats.wins++; addLegit(2); log(`Serangan ${D(w.enemy).short} ke ${RD(target).name} gagal.`, 'baik'); toast(`Serangan ${D(w.enemy).short} ke ${RD(target).name} gagal.`, true); }
-      }
-      for (const a of (w.allies || [])) {
-        if (!alive(a) || !chance(0.04)) continue;
-        const targets = regionsNear(a, w.enemy); if (!targets.length) continue;
-        const rid = pick(targets), R = G.reg[rid], A = G.fac[a];
-        const res = fight(A.army * 0.5, A.quality, 1, R.pop * 2 + E.army * 0.3, E.quality, TERRAIN[RD(rid).ter].def * (1 + 0.3 * R.fort));
-        A.army = Math.max(0, A.army - res.aLoss); E.army = Math.max(0, E.army - Math.round(res.dLoss * 0.5));
-        if (res.win && regionsOf(w.enemy).length > 1) { setOwner(rid, a); R.stab = 30; log(`Sekutu kita, ${D(a).short}, merebut ${RD(rid).name} dari ${D(w.enemy).short}.`, 'baik'); }
-      }
-      E.army = Math.round(E.army + regionsOf(w.enemy).reduce((s, r) => s + G.reg[r].pop, 0) * 0.033);
-      w.exh += 10 / 12;
-      if (!G.over && (w.wins >= 2 || w.exh >= 40) && chance(0.04) && !G.queue.some(q => q.ev === 'damaiai')) G.queue.push({ ev: 'damaiai', ctx: { fid: w.enemy } });
-    }
-  }
-}
+/* processWars ada di armies.js */
 function nearestHostile(rid, fid){
   const theirs = regionsOf(fid); if (!theirs.length) return 99;
   return Math.min(...theirs.map(t => MAP.dist[rid][t] ?? 99));
@@ -786,6 +697,7 @@ function advanceDay(){
   const prev = dateOf(G.t); G.t++; const cur = dateOf(G.t);
   G.year = cur.y; G.month = cur.m;
   dailyProjects();
+  dailyArmies(); syncArmies();
   G.wib = Math.min(WIB_MAX, G.wib + wibRate() * 12 / 365);
   if (cur.y !== prev.y) newYear(prev.y);
   if (cur.m !== prev.m) monthly();
@@ -1378,8 +1290,8 @@ const PROJ = {
     ok: rid => G.reg[rid].school < 2 || 'Sekolah di wilayah ini sudah lengkap.',
     fin: rid => { const R = G.reg[rid]; R.school++; R.stab = Math.min(100, R.stab + 5); if (G.year >= 1901) addNat(2); return `Sekolah di ${RD(rid).name} dibuka.`; } },
   recruit: { n: 'Perekrutan 500 prajurit', w: () => 13, wib: 4, cost: () => COST.recruit(),
-    ok: () => P().army + 500 * (1 + G.proj.filter(p => p.k === 'recruit').length) <= manpower() || 'Tenaga manusia sudah habis. Perluas wilayah atau tingkatkan penduduk.',
-    fin: rid => { P().army += 500; const R = G.reg[rid]; R.stab = Math.max(0, R.stab - 4); R.pop = Math.max(5, R.pop - 0.5); return `500 prajurit baru dari ${RD(rid).name} siap bertugas.`; } },
+    ok: rid => (P().army + 500 * (1 + G.proj.filter(p => p.k === 'recruit').length) <= manpower() || 'Tenaga manusia sudah habis. Perluas wilayah atau tingkatkan penduduk.') && (!(G.armies || []).some(a => a.owner !== G.player && a.siege && a.loc === rid) || 'Wilayah ini sedang dikepung musuh.'),
+    fin: rid => { ensureArmies(); const ar = myArmies().find(x => x.loc === rid && !x.to) || newArmy(G.player, rid, 0); ar.n += 500; P().army += 500; const R = G.reg[rid]; R.stab = Math.max(0, R.stab - 4); R.pop = Math.max(5, R.pop - 0.5); return `500 prajurit baru dari ${RD(rid).name} siap bertugas.`; } },
   embrace: { n: 'Utusan kepada pemuka adat', w: () => 9, wib: 8, cost: rid => COST.embrace(rid), foreign: true,
     ok: rid => (G.reg[rid].owner === 'adat' && inReach(rid)) || 'Wilayah ini tidak bisa dirangkul.',
     fin: rid => {

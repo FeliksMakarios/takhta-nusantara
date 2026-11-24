@@ -10,14 +10,19 @@ Waktu berjalan sendiri, hari demi hari, dari 1 Januari 1830 sampai 17 Agustus 19
 
 Kamu bisa membuat persekutuan militer dan perjanjian dagang (termasuk dengan Belanda dan pedagang Inggris di Singapura). Kerajaan lain juga membentuk blok kekuatan sendiri, dan pemain yang terlalu sering menaklukkan akan menghadapi koalisi tetangga.
 
+Pasukan tampil sebagai panji di peta: pilih pasukan, klik wilayah tujuan, kepung, lalu serbu. Ekspedisi Belanda dan pasukan kerajaan musuh juga bergerak di peta. Tersedia tutorial langkah demi langkah, tiga slot simpanan, dan musik gamelan yang dibuat langsung di peramban.
+
 ## Isi repositori
 
 - `index.html`: tampilan dan gaya halaman
 - `data.js`: wilayah, kerajaan, nama tokoh, lencana
 - `map-data.js`: petak peta (dibuat otomatis, jangan disunting manual)
 - `tools/build-map.js`: pembuat `map-data.js` dari garis pantai Natural Earth
-- `engine.js`: aturan permainan (ekonomi, tokoh, perang, Belanda, peristiwa)
+- `engine.js`: aturan permainan (ekonomi, tokoh, diplomasi, Belanda, peristiwa)
+- `armies.js`: pasukan di peta, pengepungan, dan pertempuran
 - `ui.js`: tampilan peta dan panel, penyimpanan kemajuan
+- `extras.js`: slot simpanan, tutorial, dan musik gamelan
+- `assets/`: ilustrasi
 
 Kemajuan pemain (level, lencana, permainan tersimpan) disimpan di peramban masing-masing.
 
