@@ -109,7 +109,7 @@ function runQueue(){
 }
 
 /* ---------- jalannya waktu ---------- */
-const SPEEDS = [0, 800, 300, 70];
+const SPEEDS = [0, 1500, 600, 250, 90, 35];
 let loopTimer = null, pointerHeld = false;
 function setSpeed(s){ if (!G || G.over) return; G.speed = s; if (s) G.lastSpeed = s; renderTop(); schedule(); if (!s) scheduleSave(); }
 function togglePause(){ if (!G) return; setSpeed(G.speed ? 0 : (G.lastSpeed || 1)); }
@@ -120,10 +120,10 @@ function step(){
   if (!G || !G.speed || G.over) return;
   if (modalOpen || pointerHeld) { loopTimer = setTimeout(step, 200); return; }
   const ov = G.ownVer, m = G.month, np = G.proj.length;
-  advanceWeek(); sanitize();
+  advanceDay(); sanitize();
   renderTop();
   if (G.ownVer !== ov || G.month !== m || G.proj.length !== np) { renderMap(); if (!panelBusy()) renderPanel(); }
-  else if (TAB === 'wilayah' || TAB === 'militer') { if (!panelBusy()) renderPanel(); }
+  else if ((TAB === 'wilayah' || TAB === 'militer') && (G.speed <= 2 || G.t % 7 === 0)) { if (!panelBusy()) renderPanel(); }
   if (G.queue.length || G.over) runQueue();
   schedule();
 }
@@ -163,131 +163,271 @@ function showEnding(){
   });
 }
 
-/* ---------- peta ---------- */
+/* ---------- peta (canvas, bisa digeser dan diperbesar) ---------- */
 let LAYER = 'pemilik', TAB = 'wilayah';
-for (const t of MAP.tiles) {
-  t.corners = [];
-  for (let i = 0; i < 6; i++) { const a = (60 * i - 30) * Math.PI / 180; t.corners.push([+(t.x + HS * Math.cos(a)).toFixed(1), +(t.y + HS * Math.sin(a)).toFixed(1)]); }
-  t.pts = t.corners.map(p => p.join(',')).join(' ');
-}
 const EDGE = [[0,1],[1,2],[2,3],[3,4],[4,5],[5,0]];
+const CORNER = Array.from({ length: 6 }, (_, i) => { const a = (60 * i - 30) * Math.PI / 180; return [HS * Math.cos(a), HS * Math.sin(a)]; });
 function hexToRgb(h){ const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
 function mix(a, b, t){ const x = hexToRgb(a), y = hexToRgb(b); return '#' + x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, '0')).join(''); }
 function tileColor(rid, mini){
-  const R = G ? G.reg[rid] : { owner: RD(rid).owner0, pros: 50, stab: 60 };
+  const R = (G && !mini) ? G.reg[rid] : { owner: RD(rid).owner0, pros: 50, stab: 60 };
   if (!mini && LAYER === 'makmur') return R.pros < 50 ? mix('#c96a4a', '#e8d9a8', R.pros / 50) : mix('#e8d9a8', '#3f8f5a', (R.pros - 50) / 50);
   if (!mini && LAYER === 'tenteram') return R.stab < 50 ? mix('#b8433a', '#e6d39a', R.stab / 50) : mix('#e6d39a', '#3f7fa8', (R.stab - 50) / 50);
   return FACTION_DEFS[R.owner].color;
 }
-function mapSVG(mini){
-  const own = rid => G ? G.reg[rid].owner : RD(rid).owner0;
-  const W = MAP.W, H = MAP.H;
-  let tiles = '', coast = '', reg = '', fac = '';
-  for (const t of MAP.tiles) {
-    tiles += `<polygon points="${t.pts}" fill="${tileColor(t.rid, mini)}" data-r="${t.rid}"/>`;
-    t.nb.forEach((n, i) => {
-      const [a, b] = EDGE[i], p = `M${t.corners[a]}L${t.corners[b]}`;
-      if (!n) coast += p;
-      else if (n.rid !== t.rid && (t.c * 100 + t.r) < (n.c * 100 + n.r)) { if (own(n.rid) !== own(t.rid)) fac += p; else reg += p; }
-    });
-  }
-  let extra = '', labels = '';
-  if (!mini && G) {
-    const mine = new Set(myRegions()), enemies = new Set(G.wars.map(w => w.enemy));
-    let mineEdge = '', selEdge = '', hatch = '';
-    for (const t of MAP.tiles) {
-      const o = G.reg[t.rid].owner;
-      if (enemies.has(o)) hatch += `<polygon points="${t.pts}"/>`;
-      t.nb.forEach((n, i) => {
-        const [a, b] = EDGE[i], p = `M${t.corners[a]}L${t.corners[b]}`;
-        if (mine.has(t.rid) && (!n || !mine.has(n.rid))) mineEdge += p;
-        if (t.rid === G.sel && (!n || n.rid !== G.sel)) selEdge += p;
-      });
-    }
-    extra = `<g class="hatch" fill="url(#hatch)">${hatch}</g><path class="e-mine" d="${mineEdge}"/><path class="e-sel" d="${selEdge}"/>`;
-    const caps = new Set();
-    for (const [fid, f] of Object.entries(G.fac)) if (f.cap && G.reg[f.cap] && G.reg[f.cap].owner === fid && fid !== G.player && D(fid).kind !== 'adat') caps.add(f.cap);
-    for (const p of G.proj) if (p.rid) { const R = RD(p.rid); labels += `<circle class="pjdot" cx="${R.lx + 6}" cy="${R.ly + 5}" r="2.6"/>`; }
-    for (const rid of caps) { const R = RD(rid); labels += `<circle class="capdot" cx="${R.lx}" cy="${R.ly}" r="2.4"/><text class="lab fac" x="${R.lx}" y="${R.ly - 5}">${esc(D(G.reg[rid].owner).short)}</text>`; }
-    const cap = P().cap;
-    if (cap) { const R = RD(cap); labels += `<path class="capstar" d="${star(R.lx, R.ly, 4.5)}"/>${G.sel !== cap ? `<text class="lab mine" x="${R.lx}" y="${R.ly - 6}">${esc(D(G.player).short)}</text>` : ''}`; }
-    if (G.sel) { const R = RD(G.sel); labels += `<text class="lab sel" x="${R.lx}" y="${R.ly + (G.sel === cap ? -6 : 3)}">${esc(R.name)}</text>`; }
-  }
-  let grid = '';
-  if (!mini) {
-    for (const lon of [95, 100, 105, 110, 115, 120, 125, 130, 135, 140]) { const x = hexXY(lon - 95, 0)[0]; grid += `<line x1="${x}" y1="${PADY - 6}" x2="${x}" y2="${H - PADY + 6}"/><text class="tick" x="${x}" y="${PADY - 10}">${lon}° BT</text>`; }
-    for (const lat of [5, 0, -5, -10]) { const y = hexXY(0, 6 - lat)[1]; grid += `<line x1="${PADX - 6}" y1="${y}" x2="${W - PADX + 6}" y2="${y}"/><text class="tick" x="${PADX - 9}" y="${y + 3}" text-anchor="end">${lat === 0 ? '0°' : Math.abs(lat) + '° ' + (lat > 0 ? 'LU' : 'LS')}</text>`; }
-  }
-  return `<svg viewBox="0 0 ${W} ${H}" class="${mini ? 'minimap' : 'map'}" role="img" aria-label="Peta Nusantara">
-    <defs><pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="1.6" height="5" fill="#9e2a22" opacity=".55"/></pattern></defs>
-    <rect class="sea" width="${W}" height="${H}"/>
-    <g class="grid">${grid}</g>
-    <g class="tiles">${tiles}</g>
-    <path class="e-reg" d="${reg}"/><path class="e-fac" d="${fac}"/><path class="e-coast" d="${coast}"/>
-    ${extra}<g class="labels">${labels}</g></svg>`;
+const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function hexPath(path, t){ path.moveTo(t.x + CORNER[0][0], t.y + CORNER[0][1]); for (let i = 1; i < 6; i++) path.lineTo(t.x + CORNER[i][0], t.y + CORNER[i][1]); path.closePath(); }
+function seg(path, t, i){ const [a, b] = EDGE[i]; path.moveTo(t.x + CORNER[a][0], t.y + CORNER[a][1]); path.lineTo(t.x + CORNER[b][0], t.y + CORNER[b][1]); }
+
+/* gambar dasar peta (dipakai juga untuk peta kecil di layar awal) */
+function paintTiles(ctx, view, mini){
+  const groups = new Map();
+  const vis = t => !view || (t.x > view[0] - HS && t.x < view[2] + HS && t.y > view[1] - HS && t.y < view[3] + HS);
+  for (const t of MAP.tiles) { if (!vis(t)) continue; const col = tileColor(t.rid, mini); let p = groups.get(col); if (!p) { p = new Path2D(); groups.set(col, p); } hexPath(p, t); }
+  const out = new Path2D(); for (const t of MAP.outside) if (vis(t)) hexPath(out, t);
+  ctx.fillStyle = cssVar('--luar') || '#9aa0ab'; ctx.fill(out);
+  for (const [col, p] of groups) { ctx.fillStyle = col; ctx.fill(p); ctx.strokeStyle = col; ctx.lineWidth = 0.6; ctx.stroke(p); }
+  return vis;
 }
-function star(cx, cy, r){ let d = ''; for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * 0.45 : r; d += (i ? 'L' : 'M') + (cx + rr * Math.cos(a)).toFixed(1) + ',' + (cy + rr * Math.sin(a)).toFixed(1); } return d + 'Z'; }
+function drawMini(canvas){
+  const dpr = window.devicePixelRatio || 1, w = canvas.clientWidth, h = canvas.clientHeight;
+  if (!w || !h) return;
+  canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+  const ctx = canvas.getContext('2d'), k = Math.max(w / MAP.W, h / MAP.H) * 1.02;
+  ctx.setTransform(dpr * k, 0, 0, dpr * k, dpr * (w - MAP.W * k) / 2, dpr * (h - MAP.H * k) / 2);
+  ctx.fillStyle = cssVar('--sea'); ctx.fillRect(-100, -100, MAP.W + 200, MAP.H + 200);
+  paintTiles(ctx, null, true);
+}
+
+const MV = {
+  cv: null, ctx: null, k: 1, tx: 0, ty: 0, w: 0, h: 0, dpr: 1, queued: false, hover: null, ptrs: new Map(), drag: null, hatch: null,
+  init(){
+    if (this.cv) return;
+    const box = document.getElementById('mapbox');
+    this.cv = document.createElement('canvas'); this.cv.setAttribute('aria-label', 'Peta Nusantara. Seret untuk menggeser, gulir untuk memperbesar.');
+    box.prepend(this.cv); this.ctx = this.cv.getContext('2d');
+    new ResizeObserver(() => this.resize()).observe(box);
+    const cv = this.cv;
+    cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); this.ptrs.set(e.pointerId, [e.offsetX, e.offsetY]); this.drag = { x: e.offsetX, y: e.offsetY, moved: false, pinch: this.ptrs.size > 1 ? this.pinchState() : null }; });
+    cv.addEventListener('pointermove', e => {
+      if (this.ptrs.has(e.pointerId)) {
+        const prev = this.ptrs.get(e.pointerId); this.ptrs.set(e.pointerId, [e.offsetX, e.offsetY]);
+        if (this.ptrs.size > 1) { const s = this.pinchState(), p = this.drag.pinch; if (p) { this.zoomAt(s.cx, s.cy, s.d / p.d); this.tx += s.cx - p.cx; this.ty += s.cy - p.cy; this.clampView(); this.request(); } this.drag.pinch = s; this.drag.moved = true; return; }
+        const dx = e.offsetX - prev[0], dy = e.offsetY - prev[1];
+        if (!this.drag.moved && Math.hypot(e.offsetX - this.drag.x, e.offsetY - this.drag.y) < 5) return;
+        this.drag.moved = true; cv.classList.add('dragging');
+        this.tx += dx; this.ty += dy; this.clampView(); this.request();
+      } else this.setHover(this.tileAt(e.offsetX, e.offsetY));
+    });
+    const end = e => {
+      const wasClick = this.drag && !this.drag.moved && this.ptrs.size === 1;
+      this.ptrs.delete(e.pointerId); cv.classList.remove('dragging');
+      if (wasClick && e.type === 'pointerup') { const t = this.tileAt(e.offsetX, e.offsetY); if (t && t.rid && G) handleAction('sel:' + t.rid); }
+      if (!this.ptrs.size) this.drag = null; else if (this.drag) this.drag.pinch = this.ptrs.size > 1 ? this.pinchState() : null;
+    };
+    cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
+    cv.addEventListener('pointerleave', () => { if (!this.ptrs.size) this.setHover(null); });
+    cv.addEventListener('wheel', e => { e.preventDefault(); this.zoomAt(e.offsetX, e.offsetY, Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0018))); }, { passive: false });
+  },
+  pinchState(){ const [a, b] = [...this.ptrs.values()]; return { d: Math.max(1, Math.hypot(a[0] - b[0], a[1] - b[1])), cx: (a[0] + b[0]) / 2, cy: (a[1] + b[1]) / 2 }; },
+  fitK(){ return Math.min(this.w / MAP.W, this.h / MAP.H); },
+  resize(){
+    const box = this.cv.parentElement, w = box.clientWidth, h = box.clientHeight;
+    if (!w || !h) return;
+    const first = !this.w; this.dpr = window.devicePixelRatio || 1;
+    const cx = this.w ? (this.w / 2 - this.tx) / this.k : MAP.W / 2, cy = this.h ? (this.h / 2 - this.ty) / this.k : MAP.H / 2;
+    this.w = w; this.h = h; this.cv.width = Math.round(w * this.dpr); this.cv.height = Math.round(h * this.dpr);
+    if (first) { this.k = this.fitK(); this.tx = (w - MAP.W * this.k) / 2; this.ty = (h - MAP.H * this.k) / 2; }
+    else { this.tx = w / 2 - cx * this.k; this.ty = h / 2 - cy * this.k; }
+    this.clampView(); this.draw();
+  },
+  zoomAt(sx, sy, f){
+    const k0 = this.k, k = clamp(k0 * f, this.fitK() * 0.85, 9);
+    this.tx = sx - (sx - this.tx) * k / k0; this.ty = sy - (sy - this.ty) * k / k0; this.k = k;
+    this.clampView(); this.request();
+  },
+  zoomBy(f){ this.zoomAt(this.w / 2, this.h / 2, f); },
+  fitAll(){ this.k = this.fitK(); this.tx = (this.w - MAP.W * this.k) / 2; this.ty = (this.h - MAP.H * this.k) / 2; this.request(); },
+  focusFaction(){
+    if (!G) return; const mine = myRegions(); if (!mine.length) return this.fitAll();
+    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    for (const r of mine) { const b = RD(r).bb; x0 = Math.min(x0, b[0]); y0 = Math.min(y0, b[1]); x1 = Math.max(x1, b[2]); y1 = Math.max(y1, b[3]); }
+    const pad = 140, k = clamp(Math.min(this.w / (x1 - x0 + pad * 2), this.h / (y1 - y0 + pad * 2)), this.fitK(), 4.5);
+    this.k = k; this.tx = this.w / 2 - (x0 + x1) / 2 * k; this.ty = this.h / 2 - (y0 + y1) / 2 * k; this.clampView(); this.request();
+  },
+  clampView(){
+    const mw = MAP.W * this.k, mh = MAP.H * this.k, m = 60;
+    this.tx = mw + 2 * m < this.w ? (this.w - mw) / 2 : clamp(this.tx, this.w - mw - m, m);
+    this.ty = mh + 2 * m < this.h ? (this.h - mh) / 2 : clamp(this.ty, this.h - mh - m, m);
+  },
+  tileAt(sx, sy){ return MAP.cellAt((sx - this.tx) / this.k, (sy - this.ty) / this.k); },
+  setHover(t){
+    const rid = t && t.rid ? t.rid : null;
+    if (rid === this.hover) return; this.hover = rid;
+    const cap = document.getElementById('hover');
+    if (cap && G) cap.textContent = rid ? `${RD(rid).name} · ${G.reg[rid].owner === G.player ? 'wilayahmu' : D(G.reg[rid].owner).short} · ${fmt(G.reg[rid].pop)} ribu jiwa` : (t && t.out ? 'Di luar wilayah permainan' : 'Seret untuk menggeser, gulir untuk memperbesar.');
+    this.request();
+  },
+  request(){ if (this.queued || !this.cv) return; this.queued = true; requestAnimationFrame(() => { this.queued = false; this.draw(); }); },
+  hatchPattern(){
+    if (!this.hatch) { const c = document.createElement('canvas'); c.width = c.height = 8; const x = c.getContext('2d'); x.strokeStyle = 'rgba(158,42,34,.6)'; x.lineWidth = 2; x.beginPath(); x.moveTo(-2, 10); x.lineTo(10, -2); x.moveTo(-2, 2); x.lineTo(2, -2); x.moveTo(6, 10); x.lineTo(10, 6); x.stroke(); this.hatch = this.ctx.createPattern(c, 'repeat'); }
+    return this.hatch;
+  },
+  draw(){
+    if (!this.cv || !this.w || !G) return;
+    const ctx = this.ctx, k = this.k, d = this.dpr;
+    ctx.setTransform(d, 0, 0, d, 0, 0);
+    ctx.fillStyle = cssVar('--sea'); ctx.fillRect(0, 0, this.w, this.h);
+    const view = [-this.tx / k, -this.ty / k, (this.w - this.tx) / k, (this.h - this.ty) / k];
+    // garis bujur dan lintang
+    ctx.strokeStyle = cssVar('--grid'); ctx.lineWidth = 1; ctx.setLineDash([3, 4]); ctx.beginPath();
+    const lons = [95,100,105,110,115,120,125,130,135,140], lats = [5,0,-5,-10];
+    for (const lon of lons) { const x = MAP.lonX(lon) * k + this.tx; ctx.moveTo(x, 0); ctx.lineTo(x, this.h); }
+    for (const lat of lats) { const y = MAP.latY(lat) * k + this.ty; ctx.moveTo(0, y); ctx.lineTo(this.w, y); }
+    ctx.stroke(); ctx.setLineDash([]);
+    ctx.setTransform(d * k, 0, 0, d * k, d * this.tx, d * this.ty);
+    const vis = paintTiles(ctx, view, false);
+    const mine = new Set(myRegions()), enemies = new Set(G.wars.map(w => w.enemy));
+    const own = rid => G.reg[rid].owner;
+    const coast = new Path2D(), reg = new Path2D(), fac = new Path2D(), mineP = new Path2D(), sel = new Path2D(), hov = new Path2D(), hatch = new Path2D(), hovFill = new Path2D();
+    for (const t of MAP.tiles) {
+      if (!vis(t)) continue;
+      if (enemies.has(own(t.rid))) hexPath(hatch, t);
+      if (t.rid === this.hover) hexPath(hovFill, t);
+      for (let i = 0; i < 6; i++) {
+        const n = t.nb[i];
+        if (!n || n.out) seg(coast, t, i);
+        else if (n.rid !== t.rid && (t.c * 1000 + t.r) < (n.c * 1000 + n.r)) seg(own(n.rid) !== own(t.rid) ? fac : reg, t, i);
+        if (mine.has(t.rid) && (!n || !mine.has(n.rid))) seg(mineP, t, i);
+        if (t.rid === G.sel && (!n || n.rid !== G.sel)) seg(sel, t, i);
+      }
+    }
+    if (enemies.size) { const p = this.hatchPattern(); p.setTransform(new DOMMatrix().scale(1 / k)); ctx.fillStyle = p; ctx.fill(hatch); }
+    ctx.fillStyle = 'rgba(255,255,255,.18)'; ctx.fill(hovFill);
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    if (k > this.fitK() * 1.6) { ctx.strokeStyle = cssVar('--regline'); ctx.lineWidth = 0.8 / k; ctx.stroke(reg); }
+    ctx.strokeStyle = cssVar('--coast'); ctx.lineWidth = 1.1 / k; ctx.stroke(coast);
+    ctx.strokeStyle = cssVar('--facline'); ctx.lineWidth = 1.5 / k; ctx.stroke(fac);
+    ctx.strokeStyle = cssVar('--gold'); ctx.lineWidth = 2.6 / k; ctx.stroke(mineP);
+    ctx.strokeStyle = cssVar('--sel'); ctx.lineWidth = 2.2 / k; ctx.setLineDash([5 / k, 3 / k]); ctx.stroke(sel); ctx.setLineDash([]);
+    // label di ruang layar supaya tetap tajam
+    ctx.setTransform(d, 0, 0, d, 0, 0);
+    const S = (x, y) => [x * k + this.tx, y * k + this.ty];
+    ctx.font = `600 10px ${cssVar('--f-mono')}`; ctx.fillStyle = cssVar('--muted'); ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    for (const lon of lons) { const x = MAP.lonX(lon) * k + this.tx; if (x > 20 && x < this.w - 20) ctx.fillText(`${lon}° BT`, x, 6); }
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    for (const lat of lats) { const y = MAP.latY(lat) * k + this.ty; if (y > 20 && y < this.h - 20) ctx.fillText(lat === 0 ? '0°' : `${Math.abs(lat)}° ${lat > 0 ? 'LU' : 'LS'}`, 6, y - 7); }
+    const boxes = [];
+    const label = (txt, x, y, font, color, force) => {
+      ctx.font = font; const w = ctx.measureText(txt).width, b = [x - w / 2 - 2, y - 8, x + w / 2 + 2, y + 8];
+      if (x < -50 || x > this.w + 50 || y < -20 || y > this.h + 20) return;
+      if (!force && boxes.some(o => b[0] < o[2] && b[2] > o[0] && b[1] < o[3] && b[3] > o[1])) return;
+      boxes.push(b); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.lineWidth = 3; ctx.strokeStyle = cssVar('--halo'); ctx.strokeText(txt, x, y); ctx.fillStyle = color; ctx.fillText(txt, x, y);
+    };
+    const ink = cssVar('--labink'), disp = cssVar('--f-display'), body = cssVar('--f-body');
+    for (const p of G.proj) if (p.rid) { const R = RD(p.rid), [x, y] = S(R.lx, R.ly); ctx.beginPath(); ctx.arc(x + 9, y + 7, 3.5, 0, 7); ctx.fillStyle = cssVar('--gold'); ctx.fill(); ctx.lineWidth = 1.2; ctx.strokeStyle = cssVar('--halo'); ctx.stroke(); }
+    const capR = P().cap ? RD(P().cap) : null;
+    if (capR) { const [x, y] = S(capR.lx, capR.ly); ctx.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? 2.6 : 6; ctx.lineTo(x + rr * Math.cos(a), y + rr * Math.sin(a)); } ctx.closePath(); ctx.fillStyle = cssVar('--gold'); ctx.fill(); ctx.lineWidth = 1.2; ctx.strokeStyle = cssVar('--halo'); ctx.stroke(); }
+    if (G.sel) { const R = RD(G.sel), [x, y] = S(R.lx, R.ly); label(R.name, x, y + 14, `700 12.5px ${body}`, ink, true); }
+    for (const [fid, f] of Object.entries(G.fac)) {
+      if (!f.cap || !G.reg[f.cap] || G.reg[f.cap].owner !== fid || D(fid).kind === 'adat') continue;
+      const R = RD(f.cap), [x, y] = S(R.lx, R.ly);
+      if (fid !== G.player) { ctx.beginPath(); ctx.arc(x, y, 2.6, 0, 7); ctx.fillStyle = ink; ctx.fill(); }
+      label(D(fid).short, x, y - 11, `${fid === G.player ? 13 : 11.5}px ${disp}`, ink, fid === G.player);
+    }
+    if (k > this.fitK() * 2.2) for (const R of Object.values(MAP.regions)) { if (R.id === G.sel) continue; const [x, y] = S(R.lx, R.ly); label(R.name, x, y + 12, `600 11px ${body}`, ink, false); }
+  }
+};
 
 /* ---------- layar awal ---------- */
 function showStart(){ document.getElementById('game').hidden = true; document.getElementById('start').hidden = false; renderStart(); window.scrollTo(0, 0); }
+function secOpen(id, def){ const s = LS.get('tn_sec') || {}; return s[id] ?? def; }
+function kingdomCard(fid){
+  const d = D(fid), open = isUnlocked(fid);
+  const regs = REGION_DEFS.filter(r => r[5] === fid);
+  return `<article class="kcard ${open ? '' : 'locked'}" style="--fc:${d.color}">
+    <div class="kband"></div>
+    <div class="kin">
+      <h4>${esc(d.name)}</h4>
+      <p>${esc(d.blurb)}</p>
+      <dl class="kfacts"><div><dt>Wilayah</dt><dd>${regs.length}</dd></div><div><dt>Prajurit</dt><dd>${fmt(d.army)}</dd></div><div><dt>Kas</dt><dd>${fmt(d.kas)}</dd></div></dl>
+      <p class="kbonus"><b>${esc(d.bonus.n)}.</b> ${esc(d.bonus.d)}</p>
+      ${open ? `<button class="btn primary" data-a="start:${fid}">Pimpin ${esc(d.short)}</button>` : `<div class="lockmsg">${esc(unlockText(fid))}</div>`}
+    </div></article>`;
+}
 function renderStart(){
   const el = document.getElementById('start'); if (el.hidden) return;
   const lv = levelOf(META.xp), [lo, hi] = levelRange(META.xp);
   const pct = hi ? Math.round((META.xp - lo) / (hi - lo) * 100) : 100;
   const sv = bestSave();
-  const cards = PLAYABLE_ORDER.map(fid => {
-    const d = D(fid), open = isUnlocked(fid);
-    const regs = REGION_DEFS.filter(r => r[5] === fid);
-    return `<article class="kcard ${open ? '' : 'locked'}" style="--fc:${d.color}">
-      <div class="kband"></div>
-      <div class="kin">
-        <div class="kstatus">${d.overlord ? 'Bawahan Hindia Belanda' : 'Merdeka'}</div>
-        <h3>${esc(d.name)}</h3>
-        <p>${esc(d.blurb)}</p>
-        <dl class="kfacts"><div><dt>Wilayah</dt><dd>${regs.length}</dd></div><div><dt>Prajurit</dt><dd>${fmt(d.army)}</dd></div><div><dt>Kas</dt><dd>${fmt(d.kas)}</dd></div></dl>
-        <p class="kbonus"><b>${esc(d.bonus.n)}.</b> ${esc(d.bonus.d)}</p>
-        ${open ? `<button class="btn primary" data-a="start:${fid}">Pimpin ${esc(d.short)}</button>` : `<div class="lockmsg">${esc(unlockText(fid))}</div>`}
-      </div></article>`;
-  }).join('');
+  const free = PLAYABLE_ORDER.filter(f => !D(f).overlord), vassal = PLAYABLE_ORDER.filter(f => D(f).overlord);
   const badges = Object.entries(BADGES).map(([id, b]) => `<li class="badge ${META.badges[id] ? 'got' : ''}" title="${esc(b.d)}"><span class="bg">${esc(b.g)}</span><span class="bn">${esc(b.n)}</span><span class="bd">${esc(b.d)}</span></li>`).join('');
   el.innerHTML = `
     <div class="hero">
-      <div class="heromap">${mapSVG(true)}</div>
+      <canvas class="heromap" aria-hidden="true"></canvas>
       <div class="herotext">
         <div class="eyebrow">Gim strategi sejarah, 1830 sampai 1945</div>
         <h1>Takhta Nusantara</h1>
-        <p>Pimpin sebuah kerajaan Nusantara di masa ketika Hindia Belanda menancapkan kuasanya dari Sabang sampai Merauke. Jaga wangsamu, kelola tanahmu, dan putuskan kapan harus berunding atau mengangkat senjata.</p>
+        <p>Pimpin sebuah kerajaan Nusantara di masa ketika Hindia Belanda menancapkan kuasanya dari Sabang sampai Merauke.</p>
       </div>
     </div>
     <div class="startgrid">
-      <section class="profile">
+      <aside class="profile">
         <div class="lvl"><span class="lvn">Level ${lv}</span><span class="xp">${fmt(META.xp)} XP${hi ? ` dari ${fmt(hi)}` : ''}</span></div>
         <div class="bar"><i style="width:${pct}%"></i></div>
         <p class="small">${META.games ? `${META.games} permainan selesai. Skor terbaik ${fmt(META.best)}.` : 'Belum ada permainan yang selesai. Setiap akhir permainan memberi XP sesuai skor, dan setiap lencana baru memberi 60 XP.'}</p>
         ${sv && sv.json ? `<div class="cont"><div><b>Permainan tersimpan</b><br><span class="small">${esc(D(sv.fac).name)}, tahun ${sv.year}</span></div><button class="btn primary" data-a="continue">Lanjutkan</button></div>` : ''}
-        <h2 class="h3">Lencana</h2>
+        <h2 class="sect">Lencana</h2>
         <ul class="badges">${badges}</ul>
-      </section>
-      <section class="kingdoms">
-        <h2 class="h3">Pilih kerajaan</h2>
-        <div class="kgrid">${cards}</div>
-        <details class="howto"><summary>Cara bermain</summary>
-          <ul>
-            <li>Waktu berjalan sendiri, satu minggu demi satu minggu, dari 1 Januari 1830 sampai 17 Agustus 1945. Tekan spasi untuk jeda, dan tombol 1, 2, atau 3 untuk mengatur kecepatan.</li>
-            <li>Setiap tindakan memakai <b>wibawa</b>, yang terkumpul perlahan setiap bulan. Pembangunan butuh waktu berbulan-bulan dan biayanya dicicil setiap minggu.</li>
-            <li>Klik wilayah di peta. Wilayahmu bisa dibangun, wilayah adat bisa dirangkul, dan wilayah musuh bisa diserang bila dalam jangkauan.</li>
-            <li>Jaga <b>legitimasi</b> dan <b>ketenteraman</b>. Bila terlalu rendah, rakyat memberontak dan bangsawan membelot.</li>
-            <li>Belanda makin kuat dari tahun ke tahun. Perang gerilya membuat mereka cepat lelah, tetapi merusak kemakmuran.</li>
-            <li>Raja menua dan wafat. Didik pewarismu dan nikahkan anak-anak untuk mengikat persekutuan.</li>
-            <li>Tokoh dalam permainan ini rekaan. Peristiwa besar seperti Perang Aceh, Politik Etis, dan Sumpah Pemuda diambil dari sejarah.</li>
-          </ul></details>
+      </aside>
+      <div class="sections">
+        <details class="sec" data-sec="tentang" ${secOpen('tentang', false) ? 'open' : ''}>
+          <summary><h2 class="sect">Tentang Takhta Nusantara</h2></summary>
+          <div class="secbody prose">
+            <p class="lead">Tahun 1830. Asap Perang Jawa baru saja reda. Pangeran Diponegoro diasingkan ke Manado, dan di Batavia, Gubernur Jenderal van den Bosch menyiapkan Tanam Paksa yang akan mengubah wajah Nusantara.</p>
+            <p>Di luar Jawa, ratusan kerajaan masih berdiri. Kesultanan Aceh menguasai jalur lada di ujung Sumatra. Para arumpone Bone memimpin armada Bugis yang berlayar sampai Singapura. Dewa Agung Klungkung masih dihormati sebagai raja tertinggi Bali. Sultan-sultan Ternate dan Tidore mewarisi kejayaan rempah yang dulu diperebutkan bangsa-bangsa Eropa.</p>
+            <p>Satu abad ke depan, satu per satu kerajaan itu akan diuji. Ada yang memilih berunding, ada yang bertempur sampai titik darah penghabisan, ada yang bertahan dengan siasat. Kapal uap, senapan baru, dan perjanjian pendek membuat Belanda makin kuat dari tahun ke tahun. Namun dari sekolah-sekolah dan surau, tumbuh gagasan baru tentang satu bangsa yang kelak bernama Indonesia.</p>
+            <p>Dalam <b>Takhta Nusantara</b>, kamu memegang takhta salah satu kerajaan itu dari 1 Januari 1830 sampai 17 Agustus 1945. Bangun negerimu, jaga wangsamu dari perebutan takhta, pilih kawan dan lawan, dan tentukan sendiri bagaimana kerajaanmu menyambut fajar kemerdekaan.</p>
+            <p class="small">Peristiwa besar dalam permainan ini diambil dari sejarah. Begitu kamu mengambil keputusan, jalan cerita bisa berbeda dari sejarah yang sebenarnya.</p>
+          </div>
+        </details>
+        <details class="sec" data-sec="cara" ${secOpen('cara', false) ? 'open' : ''}>
+          <summary><h2 class="sect">Cara Bermain</h2></summary>
+          <div class="secbody rules">
+            <section><h3>Tujuan</h3><p>Bertahan hingga 17 Agustus 1945 dengan kerajaan yang masih berdiri. Skor dihitung dari jumlah wilayah, penduduk, kas, legitimasi, semangat kebangsaan, kemenangan, lencana, dan status kerajaan. Kerajaan merdeka mendapat nilai lebih besar daripada kerajaan bawahan.</p></section>
+            <section><h3>Waktu</h3><p>Waktu berjalan sendiri, hari demi hari. Pada kecepatan 1x, satu hari berlalu dalam 1,5 detik. Tekan spasi untuk jeda dan tombol 1 sampai 5 untuk mengatur kecepatan. Waktu berhenti sendiri ketika ada peristiwa penting.</p></section>
+            <section><h3>Peta</h3><p>Seret peta untuk menggeser, gunakan roda mouse atau cubit untuk memperbesar, lalu klik wilayah untuk melihat isinya. Wilayahmu bergaris emas, ibu kotamu bertanda bintang, dan wilayah musuh yang sedang berperang denganmu diberi arsir merah.</p></section>
+            <section><h3>Wibawa</h3><p>Setiap tindakan memakai wibawa, yang terkumpul sedikit demi sedikit setiap bulan. Raja dan patih yang cakap mengelola membuat wibawa bertambah lebih cepat. Wibawa paling banyak 60, jadi gunakan sebelum terbuang.</p></section>
+            <section><h3>Pembangunan</h3><p>Pasar dan irigasi, benteng, sekolah, dan perekrutan butuh waktu berbulan-bulan. Biayanya dicicil setiap hari. Bila kas habis, pembangunan tertunda sampai kas terisi lagi. Satu wilayah hanya bisa mengerjakan satu proyek pada satu waktu.</p></section>
+            <section><h3>Ekonomi</h3><p>Penghasilan datang setiap bulan dari penduduk, kemakmuran, dan harga hasil bumi yang naik turun mengikuti sejarah. Pajak berat menambah kas tetapi membuat rakyat dan bangsawan gelisah. Kerajaan bawahan wajib menyetor upeti.</p></section>
+            <section><h3>Istana dan wangsa</h3><p>Raja menua dan wafat. Tetapkan pewaris, didik anak-anak sejak usia 6 tahun, dan nikahkan mereka untuk mempererat hubungan dengan kerajaan lain. Isi dewan kerajaan dengan orang yang cakap, dan awasi kesetiaan bangsawan agar tidak membelot.</p></section>
+            <section><h3>Diplomasi dan perang</h3><p>Kirim hadiah, ajak bersekutu, atau nyatakan perang terhadap kerajaan tetangga. Serangan hanya bisa menjangkau wilayah yang dekat dengan wilayahmu. Wilayah adat bisa dirangkul dengan damai atau ditaklukkan.</p></section>
+            <section><h3>Hindia Belanda</h3><p>Belanda makin kuat setiap tahun dan akan mengirim ultimatum. Kamu bisa tunduk, menyerahkan wilayah, atau melawan. Dalam perang, benteng harus dihancurkan dulu sebelum wilayah bisa direbut, dan perang gerilya membuat Belanda cepat lelah. Bila kelelahan perang mereka mencapai 100, mereka meminta damai.</p></section>
+            <section><h3>Legitimasi dan ketenteraman</h3><p>Jaga keduanya tetap tinggi. Ketenteraman yang rendah memicu pemberontakan, dan legitimasi yang rendah membuat bangsawan gelisah dan pergantian takhta berbahaya.</p></section>
+            <section><h3>Level dan lencana</h3><p>Setiap akhir permainan memberi XP sesuai skor, dan setiap lencana baru memberi 60 XP. Naik level dan raih lencana tertentu untuk membuka kerajaan baru.</p></section>
+          </div>
+        </details>
+        <details class="sec" data-sec="pilih" ${secOpen('pilih', true) ? 'open' : ''}>
+          <summary><h2 class="sect">Pilih Kerajaan</h2></summary>
+          <div class="secbody">
+            <h3 class="grp">Merdeka</h3>
+            <p class="small">Bebas berperang dan berdiplomasi, tetapi menjadi sasaran ekspedisi Belanda.</p>
+            <div class="kgrid">${free.map(kingdomCard).join('')}</div>
+            <h3 class="grp">Bawahan Hindia Belanda</h3>
+            <p class="small">Aman dari ekspedisi selama patuh, tetapi wajib membayar upeti dan tidak boleh berperang. Naikkan kemandirian bila ingin lepas.</p>
+            <div class="kgrid">${vassal.map(kingdomCard).join('')}</div>
+          </div>
+        </details>
         <p class="small savenote">${CLOUD.db ? 'Kemajuan disimpan di akunmu, jadi level dan lencana ikut terbawa di perangkat lain.' : 'Kemajuan disimpan di peramban ini.'}</p>
-      </section>
+      </div>
     </div>`;
+  el.querySelectorAll('details.sec').forEach(dt => dt.addEventListener('toggle', () => { const s = LS.get('tn_sec') || {}; s[dt.dataset.sec] = dt.open; LS.set('tn_sec', s); }));
+  requestAnimationFrame(() => drawMini(el.querySelector('.heromap')));
 }
 
 /* ---------- layar permainan ---------- */
-function showGame(){ document.getElementById('start').hidden = true; document.getElementById('game').hidden = false; renderAll(); window.scrollTo(0, 0); setTimeout(runQueue, 120); schedule(); }
+function showGame(){ document.getElementById('start').hidden = true; document.getElementById('game').hidden = false; window.scrollTo(0, 0); MV.init(); renderAll(); requestAnimationFrame(() => { MV.resize(); MV.focusFaction(); }); setTimeout(runQueue, 120); schedule(); }
 function renderAll(){ if (!G) return; renderTop(); renderMap(); renderPanel(); }
 
 function bar(v, cls){ return `<span class="meter ${cls || ''}"><i style="width:${clamp(v, 0, 100)}%"></i></span>`; }
@@ -301,7 +441,7 @@ function renderTop(){
     <div class="clock"><span class="yl">${run ? 'Waktu berjalan' : 'Waktu berhenti'}</span><span class="dv">${dateStr()}</span></div>
     <div class="speed" role="group" aria-label="Kecepatan waktu">
       <button class="play ${run ? '' : 'go'}" data-a="pause" aria-label="${run ? 'Jeda' : 'Jalan'}">${run ? 'Jeda' : 'Jalan'}</button>
-      ${[1,2,3].map(n => `<button data-a="speed:${n}" aria-pressed="${G.speed === n}" aria-label="Kecepatan ${n}">${n}x</button>`).join('')}
+      ${[1,2,3,4,5].map(n => `<button data-a="speed:${n}" aria-pressed="${G.speed === n}" aria-label="Kecepatan ${n}">${n}x</button>`).join('')}
     </div>
     <dl class="stats">
       <div><dt>Kas</dt><dd>${fmt(f.kas)} <small class="${inc.net >= 0 ? 'pos' : 'neg'}">${sgn(inc.net / 12)}/bln</small></dd></div>
@@ -316,12 +456,12 @@ function renderTop(){
       <button class="btn ghost" data-a="menu">Menu</button></div>`;
 }
 function renderMap(){
-  document.getElementById('mapbox').innerHTML = mapSVG(false);
+  MV.request();
   document.querySelectorAll('.layers button').forEach(b => b.setAttribute('aria-pressed', b.dataset.a === 'layer:' + LAYER));
   const leg = document.getElementById('legend');
   if (LAYER === 'pemilik') {
     const shown = new Set(Object.values(G.reg).map(r => r.owner));
-    leg.innerHTML = [...shown].filter(f => f !== 'adat').sort((a, b) => (b === G.player) - (a === G.player) || regionsOf(b).length - regionsOf(a).length).slice(0, 14)
+    leg.innerHTML = [...shown].filter(f => f !== 'adat').sort((a, b) => (b === G.player) - (a === G.player) || regionsOf(b).length - regionsOf(a).length).slice(0, 12)
       .map(f => `<span class="lg"><i style="background:${D(f).color}"></i>${esc(D(f).short)}</span>`).join('') + `<span class="lg"><i style="background:${D('adat').color}"></i>Wilayah adat</span>`;
   } else {
     leg.innerHTML = `<span class="lg ramp ${LAYER}"><i></i>${LAYER === 'makmur' ? 'Miskin sampai makmur' : 'Bergolak sampai tenteram'}</span>`;
@@ -338,11 +478,11 @@ function actRow(label, desc, cost, a, disabled, meta){
   return `<div class="act"><div><div class="al">${esc(label)}</div><div class="ad">${esc(desc)}</div>${meta ? `<div class="am">${esc(meta)}</div>` : ''}</div>
     <button class="btn sm" data-a="${a}" ${disabled ? 'disabled' : ''}>${cost != null && cost > 0 ? `${fmt(cost)} f` : 'Lakukan'}</button></div>`;
 }
-const pmeta = (k, rid) => `${durStr(PROJ[k].w(rid))}, ${PROJ[k].wib} wibawa, biaya dicicil`;
+const pmeta = (k, rid) => `${durStr(PROJ[k].w(rid) * 7)}, ${PROJ[k].wib} wibawa, biaya dicicil`;
 function projBox(pj){
-  const left = pj.weeks - pj.done;
+  const left = pj.days - pj.done;
   return `<div class="proj"><div class="pjh"><b>${esc(PROJ[pj.k].n)}</b><span class="small">${pj.stall ? 'Tertunda karena kas kosong' : 'Sisa ' + durStr(left)}</span></div>
-    ${bar(pj.done / pj.weeks * 100, 'gold')}<button class="btn sm ghost" data-a="cancel:${G.proj.indexOf(pj)}">Batalkan</button></div>`;
+    ${bar(pj.done / pj.days * 100, 'gold')}<button class="btn sm ghost" data-a="cancel:${G.proj.indexOf(pj)}">Batalkan</button></div>`;
 }
 function tabWilayah(){
   const rid = G.sel, R = rid && G.reg[rid], d = rid && RD(rid);
@@ -388,7 +528,7 @@ function tabWilayah(){
   }
   const f = P();
   const rows = myRegions().sort((a, b) => regionGross(b) - regionGross(a)).map(r => `<tr data-a="sel:${r}" class="${r === G.sel ? 'on' : ''}"><td>${esc(RD(r).name)}${r === f.cap ? ' <span class="cap">ibu kota</span>' : ''}</td><td>${fmt(G.reg[r].pop)}</td><td>${Math.round(G.reg[r].pros)}</td><td>${Math.round(G.reg[r].stab)}</td><td>${fmt(regionGross(r))}</td></tr>`).join('');
-  const projs = G.proj.map(p => `<li data-a="${p.rid ? 'sel:' + p.rid : 'tab:militer'}"><span>${esc(PROJ[p.k].n)}${p.rid ? ' di ' + esc(RD(p.rid).name) : ''}</span><span class="small">${p.stall ? 'tertunda' : 'sisa ' + durStr(p.weeks - p.done)}</span>${bar(p.done / p.weeks * 100, 'gold')}</li>`).join('');
+  const projs = G.proj.map(p => `<li data-a="${p.rid ? 'sel:' + p.rid : 'tab:militer'}"><span>${esc(PROJ[p.k].n)}${p.rid ? ' di ' + esc(RD(p.rid).name) : ''}</span><span class="small">${p.stall ? 'tertunda' : 'sisa ' + durStr(p.days - p.done)}</span>${bar(p.done / p.days * 100, 'gold')}</li>`).join('');
   html += `<section class="card">
     <h3>Pembangunan berjalan</h3>
     ${projs ? `<ul class="projlist">${projs}</ul>` : '<p class="small">Belum ada pembangunan. Pilih wilayahmu di peta untuk memulai.</p>'}
@@ -552,12 +692,13 @@ function handleAction(a){
   const [cmd, x, y] = a.split(':');
   switch (cmd) {
     case 'start': newGame(x); sanitize(); saveNow(); showGame(); break;
-    case 'continue': { const s = bestSave(); if (s && s.json) { try { const g = JSON.parse(s.json); if (!g.v || g.v < 2) { clearSave(); renderStart(); toast('Simpanan dari versi lama tidak cocok dengan sistem waktu yang baru. Silakan mulai permainan baru.'); break; } G = g; G.speed = 0; showGame(); } catch (e) { toast('Simpanan rusak dan tidak bisa dibuka.'); } } break; }
+    case 'continue': { const s = bestSave(); if (s && s.json) { try { const g = JSON.parse(s.json); if (!g.v || g.v < 3) { clearSave(); renderStart(); toast('Simpanan dari versi lama tidak cocok dengan sistem waktu yang baru. Silakan mulai permainan baru.'); break; } G = g; G.speed = 0; showGame(); } catch (e) { toast('Simpanan rusak dan tidak bisa dibuka.'); } } break; }
     case 'pause': togglePause(); break;
     case 'speed': setSpeed(+x); break;
     case 'ending': showEnding(); break;
     case 'menu': menuOpen(); break;
     case 'sel': G.sel = x; TAB = 'wilayah'; renderMap(); renderPanel(); break;
+    case 'zoom': if (x === 'in') MV.zoomBy(1.4); else if (x === 'out') MV.zoomBy(1 / 1.4); else if (x === 'all') MV.fitAll(); else MV.focusFaction(); break;
     case 'tab': TAB = x; renderPanel(); break;
     case 'layer': LAYER = x; renderMap(); break;
     case 'mode': G.mode = x; renderPanel(); break;
@@ -573,9 +714,7 @@ function handleAction(a){
 }
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-a]');
-  if (el && !el.disabled) { handleAction(el.dataset.a); return; }
-  const poly = e.target.closest('#mapbox [data-r]');
-  if (poly && G) handleAction('sel:' + poly.dataset.r);
+  if (el && !el.disabled) handleAction(el.dataset.a);
 });
 document.addEventListener('change', e => {
   const el = e.target.closest('[data-c]'); if (!el || !G) return;
@@ -585,18 +724,13 @@ document.addEventListener('change', e => {
   if (cmd === 'heir') { P().heir = +el.value; toast('Pewaris takhta ditetapkan.'); }
   renderAll(); scheduleSave();
 });
-document.addEventListener('pointerover', e => {
-  const p = e.target.closest && e.target.closest('#mapbox [data-r]'); const cap = document.getElementById('hover');
-  if (!cap || !G) return;
-  if (!p) return;
-  const rid = p.dataset.r, R = G.reg[rid];
-  cap.textContent = `${RD(rid).name} · ${R.owner === G.player ? 'wilayahmu' : D(R.owner).short} · ${fmt(R.pop)} ribu jiwa`;
-});
 document.addEventListener('keydown', e => {
   const typing = e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName);
   if (G && !modalOpen && !typing && !document.getElementById('game').hidden) {
     if (e.code === 'Space') { e.preventDefault(); togglePause(); return; }
-    if (['1','2','3'].includes(e.key)) { setSpeed(+e.key); return; }
+    if (['1','2','3','4','5'].includes(e.key)) { setSpeed(+e.key); return; }
+    if (e.key === '+' || e.key === '=') { MV.zoomBy(1.3); return; }
+    if (e.key === '-') { MV.zoomBy(1 / 1.3); return; }
   }
   if (e.key === 'Escape' && modalOpen) {
     const cancel = [...document.querySelectorAll('#modal .opt')].find(b => b.textContent.trim().startsWith('Batal') || b.textContent.trim().startsWith('Tutup'));
@@ -608,7 +742,7 @@ document.addEventListener('keydown', e => {
 function boot(data){
   mergeMeta(LS.get('tn_meta'));
   let restored = false;
-  if (data && data.G) { try { G = JSON.parse(data.G); restored = G.v >= 2; if (restored) G.speed = 0; else G = null; } catch (e) { G = null; } }
+  if (data && data.G) { try { G = JSON.parse(data.G); restored = G.v >= 3; if (restored) G.speed = 0; else G = null; } catch (e) { G = null; } }
   if (restored) showGame(); else showStart();
   initCloud();
 }
