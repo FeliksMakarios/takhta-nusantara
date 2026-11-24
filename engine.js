@@ -110,6 +110,7 @@ function charName(c){
     if (c.g === 'P' && d.title === 'Sultan') return `Sultanah ${c.n}`;
     return `${d.title} ${c.n}`;
   }
+  if (c.full) return c.full;
   if (c.dyn) return `${c.g === 'L' ? cul.pm : cul.pf} ${c.n}`;
   if (c.noble) return `${c.g === 'L' ? cul.nm : cul.nf} ${c.n}`;
   return c.n;
@@ -142,40 +143,76 @@ function newGame(fid){
   for (const [id, f] of Object.entries(G.fac)) if (f.cap && G.reg[f.cap] && G.reg[f.cap].owner === id) G.reg[f.cap].fort = Math.max(G.reg[f.cap].fort, 1);
   if (fid === 'gowa') for (const r of regionsOf('gowa')) G.reg[r].fort = 2;
   // nama penguasa faksi lain (hanya untuk tampilan)
-  for (const [id, d] of Object.entries(FACTION_DEFS)) if (d.kind === 'kerajaan' && id !== fid) G.fac[id].rulerName = aiRulerName(id);
-  // hubungan dengan pemain
+  for (const [id, d] of Object.entries(FACTION_DEFS)) if (d.kind === 'kerajaan' && id !== fid) G.fac[id].rulerName = AI_RULERS_1830[id] || aiRulerName(id);
+  // hubungan dengan pemain dan antarkerajaan (data 1830)
   const pd = D(fid);
+  G.arel = {};
+  for (const [a, b, v] of RELATIONS) G.arel[a < b ? a + '|' + b : b + '|' + a] = v;
+  G.aiwars = [];
   for (const [id, d] of Object.entries(FACTION_DEFS)) {
     if (id === fid) continue;
     let r = 10;
     if (d.culture && d.culture === pd.culture) r += 15;
+    const k = id < fid ? id + '|' + fid : fid + '|' + id;
+    if (G.arel[k] !== undefined) r = G.arel[k];
     if (id === 'belanda') r = pd.rel?.belanda ?? 0;
     if (d.kind === 'asing') r = 5;
+    if (fid === 'klungkung' && d.culture === 'bali') r += 15;
     G.rel[id] = r;
   }
-  // istana pemain
-  const cul = pd.culture;
-  const ruler = newChar({ fac: fid, cul, g: 'L', age: rint(28, 42), dyn: true, mil: rint(4, 8), dip: rint(4, 8), adm: rint(4, 8), adultTraits: true });
-  ruler.tr = [pick(GOOD_TRAITS)]; if (chance(0.35)) ruler.tr.push(pick(BAD_TRAITS));
-  const sp = newChar({ fac: fid, cul, g: 'P', age: age(ruler) - rint(3, 9), adultTraits: true });
-  ruler.sp = sp.id; sp.sp = ruler.id;
-  P().ruler = ruler.id;
-  const kids = rint(1, 3);
-  for (let i = 0; i < kids; i++) {
-    const k = newChar({ fac: fid, cul, age: rint(1, Math.max(2, Math.min(16, age(sp) - 17))), dyn: true, par: ruler.id });
-    if (i === 0) { k.g = 'L'; k.n = pick(CULTURES[cul].m); }
-  }
-  if (chance(0.6)) newChar({ fac: fid, cul, g: 'L', age: age(ruler) - rint(2, 8), dyn: true, adultTraits: true });
-  for (let i = 0; i < 5; i++) newChar({ fac: fid, cul, g: chance(0.85) ? 'L' : 'P', age: rint(25, 58), noble: true, adultTraits: true });
-  autoCouncil();
-  P().heir = defaultHeir();
+  buildCourt(fid);
   G.t = 0; G.month = 0; G.wib = 24; G.proj = []; G.speed = 0; G.ownVer = 0;
   G.sel = P().cap;
   G.flags.h_sambutan = 1; G.queue.push({ ev: 'sambutan', ctx: {} });
-  log(`${charName(ruler)} memulai pemerintahannya atas ${pd.name}.`, 'penting');
+  log(`${charName(rulerC())} memulai pemerintahannya atas ${pd.name}.`, 'penting');
 }
 
-function aiRulerName(id){ const d = D(id), cul = CULTURES[d.culture] || CULTURES.melayu; return `${d.title || 'Raja'} ${pick(cul.m)}`; }
+function aiRulerName(id){
+  const d = D(id), cul = CULTURES[d.culture] || CULTURES.melayu;
+  if (d.regnal) return `${d.title} ${d.regnal} ${roman(G.fac[id].regnalN)}`;
+  if (d.culture === 'bali') return `${d.title} ${d.short}`; // nama raja-raja Bali tahun 1830 belum bisa dipastikan
+  return `${d.title || 'Raja'} ${pick(cul.m)}`;
+}
+function governor(){ let n = GOVERNORS[0][1]; for (const [y, name] of GOVERNORS) if (G.year >= y) n = name; return n; }
+
+/* Istana pemain: tokoh sejarah lebih dulu, lalu dilengkapi tokoh rekaan yang namanya sesuai budaya setempat. */
+function buildCourt(fid){
+  const pd = D(fid), cul = pd.culture, hist = HIST_CHARS[fid] || [], byKey = {};
+  G.hkey = {}; G.hbirths = [];
+  for (const h of hist) {
+    if (h.born) { G.hbirths.push({ fid, h, y: h.b, m: h.bm || rint(1, 12) }); continue; }
+    const c = newChar({ fac: fid, cul, g: h.g, b: h.b, dyn: !h.noble, noble: !!h.noble, mil: h.mil, dip: h.dip, adm: h.adm, traits: h.tr || [], loy: h.noble ? rint(55, 75) : undefined });
+    c.n = h.n; if (h.full) c.full = h.full; c.hist = true; if (h.bp) c.bp = true;
+    if (h.hd) c.hd = h.hd + rint(-1, 2);
+    if (h.key) { byKey[h.key] = c; G.hkey[h.key] = c.id; }
+    if (h.ruler) P().ruler = c.id;
+    if (h.role) P().council[h.role] = c.id;
+    h._c = c;
+  }
+  for (const h of hist) if (h._c) {
+    if (h.par && byKey[h.par]) h._c.par = byKey[h.par].id;
+    if (h.spOf && byKey[h.spOf]) { h._c.sp = byKey[h.spOf].id; byKey[h.spOf].sp = h._c.id; h._c.dyn = false; }
+    delete h._c;
+  }
+  let ruler = rulerC();
+  if (!ruler) {
+    ruler = newChar({ fac: fid, cul, g: 'L', age: rint(28, 42), dyn: true, mil: rint(4, 8), dip: rint(4, 8), adm: rint(4, 8), adultTraits: true });
+    ruler.tr = [pick(GOOD_TRAITS)]; if (chance(0.35)) ruler.tr.push(pick(BAD_TRAITS));
+    P().ruler = ruler.id;
+    const kids = rint(1, 3);
+    for (let i = 0; i < kids; i++) { const k = newChar({ fac: fid, cul, age: rint(1, 14), dyn: true, par: ruler.id }); if (i === 0) { k.g = 'L'; k.n = pick(CULTURES[cul].m); } }
+  }
+  // pendamping untuk penguasa dewasa yang belum punya pasangan
+  if (age(ruler) >= 18 && !ruler.sp && !(hist.find(h => h.ruler) || {}).single) {
+    const sp = newChar({ fac: fid, cul, g: ruler.g === 'L' ? 'P' : 'L', age: Math.max(16, age(ruler) - rint(2, 9)), adultTraits: true });
+    ruler.sp = sp.id; sp.sp = ruler.id;
+  }
+  if (fid === 'surakarta') ruler.infertile = true; // Pakubuwono VII wafat tanpa keturunan
+  while (nobles().length < 4) newChar({ fac: fid, cul, g: chance(0.85) ? 'L' : 'P', age: rint(25, 58), noble: true, adultTraits: true });
+  autoCouncil();
+  const hh = hist.find(h => h.heir && !h.born);
+  P().heir = hh && byKey[hh.key] ? byKey[hh.key].id : (hh ? (Object.values(G.chars).find(c => c.n === hh.n && c.fac === fid) || {}).id : null) || defaultHeir();
+}
 
 /* ---------- istana ---------- */
 function court(){ return Object.values(G.chars).filter(c => c.fac === G.player && c.alive && !c.out); }
@@ -197,13 +234,20 @@ function autoCouncil(){
 function councilOf(seat){ const c = CH(P().council[seat]); return c && c.alive && !c.out ? c : null; }
 
 function defaultHeir(){
+  // urutan: putra penguasa, cucu laki-laki dari putra, kerabat laki-laki lain (tertua), putri, kerabat perempuan
   const r = rulerC(); if (!r) return null;
-  const kids = family().filter(c => c.par === r.id && c.id !== r.id).sort((a, b) => a.b - b.b);
-  const sons = kids.filter(c => c.g === 'L');
-  if (sons.length) return sons[0].id;
-  if (kids.length) return kids[0].id;
-  const others = family().filter(c => c.id !== r.id && c.g === 'L').sort((a, b) => a.b - b.b);
-  return others.length ? others[0].id : (family().filter(c => c.id !== r.id)[0]?.id || null);
+  const fam = family().filter(c => c.id !== r.id).sort((a, b) => a.b - b.b);
+  const kids = fam.filter(c => c.par === r.id);
+  const kidIds = new Set(Object.values(G.chars).filter(c => c.par === r.id).map(c => c.id));
+  const order = [
+    kids.filter(c => c.g === 'L'),
+    fam.filter(c => c.g === 'L' && kidIds.has(c.par)),
+    fam.filter(c => c.g === 'L'),
+    kids.filter(c => c.g === 'P'),
+    fam
+  ];
+  for (const list of order) if (list.length) return list[0].id;
+  return null;
 }
 function heirC(){ const h = CH(P().heir); if (h && h.alive && !h.out && h.dyn) return h; P().heir = defaultHeir(); return CH(P().heir); }
 
@@ -267,12 +311,16 @@ function incomeBreakdown(){
   const gross = myRegions().reduce((s, x) => s + regionGross(x), 0);
   let mult = TAX[f.tax].m * (1 + (stat(r, 'adm') - 5) * 0.03) * (patih ? 1 + (stat(patih, 'adm') - 5) * 0.03 : 0.95);
   if (hasTrait(r, 'boros')) mult *= 0.9;
-  const income = gross * mult;
+  let income = gross * mult;
+  // Dewa Agung Klungkung menerima persembahan dari raja-raja Bali yang bersahabat
+  let homage = 0;
+  if (D(G.player).bonus.id === 'puputan') for (const [id, d] of Object.entries(FACTION_DEFS)) if (d.culture === 'bali' && id !== G.player && alive(id) && !G.fac[id].overlord && (G.rel[id] ?? 0) >= 0) homage += 14;
+  income += homage;
   const tribute = f.overlord ? income * (G.japan ? 0.3 : 0.2) : 0;
   const upkeep = f.army * 0.02;
   const courtCost = 10 + myRegions().length * 3 + gross * 0.12;
   const loans = (G.flags.loanYears > 0) ? 60 : 0;
-  return { gross, income, tribute, upkeep, court: courtCost, loans, net: income - tribute - upkeep - courtCost - loans };
+  return { gross, homage, income, tribute, upkeep, court: courtCost, loans, net: income - tribute - upkeep - courtCost - loans };
 }
 function manpower(){ return Math.round(myRegions().reduce((s, r) => s + G.reg[r].pop * 8, 0)); }
 
@@ -445,10 +493,12 @@ function durStr(days){ if (days >= 360) return `${String(Math.round(days / 365 *
 
 /* ---------- ekspedisi Belanda (tahun dan bulan) ---------- */
 const EXPED = [
-  {y:1837,m:8,t:'minang'},{y:1846,m:6,t:'klungkung'},{y:1849,m:4,t:'klungkung'},{y:1856,m:8,r:'lampung'},{y:1858,m:2,t:'siak',v:true},
-  {y:1858,m:9,t:'jambi'},{y:1859,m:4,t:'banjar'},{y:1860,m:2,t:'bone'},{y:1873,m:4,t:'aceh'},{y:1880,m:6,t:'tidore',v:true},
-  {y:1894,m:7,t:'klungkung'},{y:1901,m:5,t:'jambi'},{y:1905,m:7,t:'bone'},{y:1905,m:10,t:'gowa'},{y:1905,m:11,t:'luwu'},{y:1906,m:3,t:'wajo'},
-  {y:1908,m:4,t:'klungkung'},{y:1907,m:6,t:'batak'},{y:1909,m:3,t:'kutai',v:true},{y:1911,m:2,t:'riau'},{y:1912,m:5,t:'bima',v:true},{y:1914,m:4,t:'ternate',v:true}
+  {y:1837,m:8,t:'minang'},{y:1838,m:5,t:'indragiri',v:true},{y:1846,m:6,t:'buleleng'},{y:1848,m:6,t:'buleleng'},{y:1849,m:4,t:'karangasem'},{y:1849,m:5,t:'klungkung'},
+  {y:1850,m:3,t:'bulungan',v:true},{y:1855,m:6,t:'sambas',v:true},{y:1856,m:8,r:'lampung'},{y:1858,m:2,t:'siak',v:true},{y:1858,m:9,t:'jambi'},
+  {y:1859,m:4,t:'banjar'},{y:1860,m:2,t:'bone'},{y:1873,m:4,t:'aceh'},{y:1875,m:5,t:'sumbawa',v:true},{y:1880,m:6,t:'tidore',v:true},{y:1889,m:3,t:'bacan',v:true},
+  {y:1894,m:7,t:'lombok'},{y:1900,m:3,t:'gianyar',v:true},{y:1901,m:5,t:'jambi'},{y:1905,m:7,t:'bone'},{y:1905,m:7,t:'soppeng'},{y:1905,m:10,t:'gowa'},
+  {y:1905,m:11,t:'luwu'},{y:1906,m:3,t:'wajo'},{y:1906,m:4,t:'pasir',v:true},{y:1906,m:9,t:'badung'},{y:1906,m:9,t:'tabanan'},{y:1907,m:6,t:'batak'},
+  {y:1908,m:4,t:'klungkung'},{y:1909,m:3,t:'kutai',v:true},{y:1909,m:6,t:'bangli',v:true},{y:1911,m:2,t:'riau'},{y:1912,m:5,t:'bima',v:true},{y:1914,m:4,t:'ternate',v:true}
 ];
 
 function processBelanda(){
@@ -480,6 +530,39 @@ function processBelanda(){
     } else if (P().overlord === 'belanda' && chance(0.13 / 12)) {
       G.queue.push({ ev: 'tuntutan', ctx: {} });
     }
+  }
+}
+
+/* ---------- konflik antarkerajaan tetangga ---------- */
+const relKey = (a, b) => a < b ? a + '|' + b : b + '|' + a;
+const aiAtWar = (a, b) => (G.aiwars || []).some(w => (w.a === a && w.b === b) || (w.a === b && w.b === a));
+function regionsNear(fromFid, toFid){
+  const mine = regionsOf(fromFid), theirs = regionsOf(toFid);
+  return theirs.filter(t => mine.some(m => (MAP.dist[m][t] ?? 99) <= 1.5));
+}
+function processAIConflicts(){
+  if (!G.arel) return;
+  if (!G.aiwars) G.aiwars = [];
+  for (const [k, v] of Object.entries(G.arel)) {
+    if (v > -20) continue;
+    const [a, b] = k.split('|');
+    if (a === G.player || b === G.player || !alive(a) || !alive(b) || G.fac[a].overlord || G.fac[b].overlord || aiAtWar(a, b)) continue;
+    if (!regionsNear(a, b).length || !chance(0.0025 + (-v - 20) / 20000)) continue;
+    const [att, def] = chance(0.5) ? [a, b] : [b, a];
+    G.aiwars.push({ a: att, b: def, start: G.year });
+    log(`Perang pecah antara ${D(att).name} dan ${D(def).name}.`, 'kabar');
+  }
+  for (const w of G.aiwars.slice()) {
+    if (!alive(w.a) || !alive(w.b) || G.fac[w.a].overlord || G.fac[w.b].overlord) { G.aiwars.splice(G.aiwars.indexOf(w), 1); continue; }
+    if (chance(0.07)) {
+      const [att, def] = chance(0.5) ? [w.a, w.b] : [w.b, w.a];
+      const targets = regionsNear(att, def); if (!targets.length) continue;
+      const rid = pick(targets), R = G.reg[rid], A = G.fac[att], Df = G.fac[def];
+      const res = fight(A.army * 0.6, A.quality, 1, R.pop * 2 + Df.army * 0.4, Df.quality, TERRAIN[RD(rid).ter].def * (1 + 0.3 * R.fort));
+      A.army = Math.max(0, A.army - res.aLoss); Df.army = Math.max(0, Df.army - Math.round(res.dLoss * 0.5));
+      if (res.win && regionsOf(def).length > 1) { setOwner(rid, att); R.stab = 30; log(`${D(att).short} merebut ${RD(rid).name} dari ${D(def).short}.`, 'kabar'); }
+    }
+    if (chance(0.035)) { G.aiwars.splice(G.aiwars.indexOf(w), 1); G.arel[relKey(w.a, w.b)] = Math.min(0, (G.arel[relKey(w.a, w.b)] || 0) + 25); log(`${D(w.a).short} dan ${D(w.b).short} berdamai.`, 'kabar'); }
   }
 }
 
@@ -588,8 +671,9 @@ function monthly(){
     if (id === G.player || D(id).kind !== 'kerajaan' || !alive(id)) continue;
     const pop = regionsOf(id).reduce((s, r) => s + G.reg[r].pop, 0);
     F.army = Math.round(F.army + (pop * 5 - F.army) * 0.009);
-    if (chance(0.04 / 12)) F.rulerName = aiRulerName(id);
+    if (chance(0.04 / 12)) { F.regnalN++; F.rulerName = aiRulerName(id); }
   }
+  processAIConflicts();
   for (const id of Object.keys(G.rel)) { if (id === 'belanda') continue; G.rel[id] += (10 - G.rel[id]) * 0.0025; }
   for (const a of G.allies.slice()) if (!alive(a)) G.allies = G.allies.filter(x => x !== a);
 
@@ -631,7 +715,8 @@ function monthlyCharacters(){
   const f = P(), M = 1 / 12, report = [];
   let rulerDied = false;
   for (const c of court()) {
-    if (!chance(deathChance(c) * M)) continue;
+    const pd = c.hd ? (G.year < c.hd ? deathChance(c) * M * 0.25 : 0.12) : deathChance(c) * M;
+    if (!chance(pd)) continue;
     c.alive = false;
     if (c.id === f.ruler) { rulerDied = true; report.push(`${charName(c)} wafat pada usia ${age(c)} tahun.`); log(`${charName(c)} wafat.`, 'buruk'); }
     else if (c.dyn || c.sp === f.ruler) { log(`${charName(c)} meninggal dunia pada usia ${age(c)} tahun.`, 'info'); toast(`${charName(c)} meninggal dunia.`); }
@@ -640,16 +725,23 @@ function monthlyCharacters(){
   }
   if (rulerDied) { succession(report); if (!G.over) notice('Pergantian takhta', report.join(' ')); }
   if (G.over) return;
-  const r = rulerC(), sp = CH(r?.sp);
-  if (r && sp && sp.alive) {
-    const mother = r.g === 'P' ? r : sp;
-    if (age(mother) >= 16 && age(mother) <= 42 && chance(0.26 * M)) {
-      const k = newChar({ fac: G.player, cul: D(G.player).culture, age: 0, dyn: true, par: r.id });
-      log(`Lahir ${k.n}, ${k.g === 'L' ? 'putra' : 'putri'} ${charName(r)}.`, 'baik');
+  const r = rulerC();
+  // kelahiran: setiap pasangan dalam wangsa bisa punya anak
+  for (const c of family()) {
+    const sp = CH(c.sp);
+    if (!sp || !sp.alive || sp.out || c.infertile || sp.infertile) continue;
+    if (c.g === 'P' && c.id !== f.ruler) continue; // anak dari putri yang tinggal di istana dicatat lewat pasangannya
+    const mother = c.g === 'P' ? c : sp;
+    if (age(mother) < 16 || age(mother) > 42) continue;
+    if (!chance((c.id === f.ruler ? 0.26 : 0.18) * M)) continue;
+    const k = newChar({ fac: G.player, cul: D(G.player).culture, age: 0, dyn: true, par: c.id });
+    log(`Lahir ${k.n}, ${k.g === 'L' ? 'putra' : 'putri'} ${charName(c)}.`, 'baik');
+    if (c.id === f.ruler) {
       toast(`Kabar gembira: lahir ${k.g === 'L' ? 'seorang putra' : 'seorang putri'}, ${k.n}.`, true);
       if (!heirC() || (k.g === 'L' && heirC().g === 'P' && heirC().par === r.id)) f.heir = defaultHeir();
     }
   }
+  histBirths();
   for (const c of nobles()) {
     const seat = Object.values(f.council).includes(c.id);
     const t = 45 + (f.legit ?? 60) * 0.25 + TAX[f.tax].loy + (seat ? 10 : 0) - (hasTrait(r, 'serakah') ? 10 : 0) - (G.rel.belanda < 0 ? 6 : 0);
@@ -657,6 +749,22 @@ function monthlyCharacters(){
   }
   autoCouncilFill();
   if (!heirC()) f.heir = defaultHeir();
+}
+
+function histBirths(){
+  if (!G.hbirths || !G.hbirths.length) return;
+  for (const hb of G.hbirths.slice()) {
+    if (G.year < hb.y || (G.year === hb.y && G.month + 1 < hb.m)) continue;
+    G.hbirths.splice(G.hbirths.indexOf(hb), 1);
+    const h = hb.h, par = h.par ? CH(G.hkey[h.par]) : null;
+    if (h.par && (!par || !par.alive || par.out)) continue; // sejarah sudah berbelok
+    const c = newChar({ fac: G.player, cul: D(G.player).culture, g: h.g, b: G.year, dyn: true, par: par ? par.id : null, mil: h.mil, dip: h.dip, adm: h.adm, traits: [] });
+    c.n = h.n; if (h.full) c.full = h.full; c.hist = true; if (h.hd) c.hd = h.hd + rint(-1, 2); c.futureTraits = h.tr || [];
+    if (h.key) G.hkey[h.key] = c.id;
+    if (h.heir && (!par || par.id === P().ruler)) P().heir = c.id;
+    log(`Lahir ${c.full || c.n}, tokoh yang tercatat dalam sejarah.`, 'baik');
+    toast(`Lahir ${c.full || c.n}.`, true);
+  }
 }
 
 function yearlyCharacters(){
@@ -669,9 +777,21 @@ function yearlyCharacters(){
         if (chance(0.7) && !c.tr.includes(map[c.edu][0])) c.tr.push(map[c.edu][0]);
         if (c.edu === 'eropa') addRel('belanda', 6);
       }
+      for (const t of (c.futureTraits || [])) if (!c.tr.includes(t)) c.tr.push(t);
       if (!c.tr.length) c.tr.push(chance(0.6) ? pick(GOOD_TRAITS) : pick(BAD_TRAITS));
       log(`${charName(c)} telah dewasa.`, 'info');
     }
+  }
+  // pernikahan dalam wangsa
+  for (const c of family()) {
+    if (c.sp && CH(c.sp) && CH(c.sp).alive) continue;
+    const a = age(c); if (a < 18 || a > 40) continue;
+    const key = c.id === P().ruler || c.id === P().heir;
+    if (!chance(key ? 0.6 : 0.3)) continue;
+    if (c.g === 'P' && !key) { c.out = true; log(`${charName(c)} menikah dan pindah ke keluarga suaminya.`, 'info'); continue; }
+    const sp = newChar({ fac: G.player, cul: D(G.player).culture, g: c.g === 'L' ? 'P' : 'L', age: Math.max(16, a - rint(0, 8)), adultTraits: true });
+    c.sp = sp.id; sp.sp = c.id;
+    log(`${charName(c)} menikah dengan ${sp.n}.`, 'info');
   }
   if (nobles().length < 5 && chance(0.4)) { const c = newChar({ fac: G.player, cul: D(G.player).culture, age: rint(18, 30), noble: true, adultTraits: true }); log(`${charName(c)} bergabung dengan istana.`, 'info'); }
 }
@@ -1024,6 +1144,8 @@ const NEWS = [
   { y: 1883, m: 8, d: 27, fn: () => { for (const r of ['banten','batavia','lampung']) { G.reg[r].pros = Math.max(5, G.reg[r].pros - 25); G.reg[r].pop *= 0.94; } } },
   { y: 1884, m: 2, fn: () => { G.price.gula *= 0.75; news('Krisis gula melanda. Harga gula turun tajam.'); } },
   { y: 1885, m: 6, fn: () => { for (const r of ['deli','kutai','palembang']) G.reg[r].pros = Math.min(100, G.reg[r].pros + 15); news('Minyak bumi ditemukan di Telaga Said, Langkat. Deli, Kutai, dan Palembang ikut makmur.'); } },
+  { y: 1885, m: 3, fn: () => { if (G.player !== 'madura' && alive('madura')) { for (const r of regionsOf('madura')) setOwner(r, 'belanda'); news('Belanda menghapus kerajaan-kerajaan Madura dan memerintah pulau itu secara langsung.'); } } },
+  { y: 1891, m: 6, fn: () => { if (G.player !== 'mengwi' && alive('mengwi') && !G.fac.mengwi.overlord) { const to = alive('badung') ? 'badung' : alive('tabanan') ? 'tabanan' : null; if (to) { for (const r of regionsOf('mengwi')) setOwner(r, to); news(`Mengwi runtuh diserang Badung dan Tabanan. Wilayahnya jatuh ke tangan ${D(to).short}.`); } } } },
   { y: 1898, m: 6, fn: () => news('Van Heutsz memperkenalkan perjanjian pendek. Semua kerajaan diminta tunduk pada Belanda.') },
   { y: 1905, m: 1, fn: () => { G.price.hutan = 1.5; news('Perkebunan karet menyebar. Hasil hutan semakin berharga.'); } },
   { y: 1930, m: 1, fn: () => { G.priceAll *= 0.65; } },

@@ -1,7 +1,7 @@
 'use strict';
 /* Membuat map-data.js dari garis pantai Natural Earth (world-atlas, resolusi 1:10 juta).
    Jalankan: npm install && npm run build-map
-   Peta dibagi menjadi petak heksagonal 0,2 derajat. Setiap petak daratan diberikan
+   Peta dibagi menjadi petak heksagonal 0,15 derajat. Setiap petak daratan diberikan
    kepada wilayah terdekat yang berada di pulau yang sama. */
 
 const fs = require('fs');
@@ -15,7 +15,7 @@ vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(path.join(ROOT, 'data.js'), 'utf8') + ';this.REGION_DEFS = REGION_DEFS;', ctx);
 const REGIONS = ctx.REGION_DEFS.map(d => ({ id: d[0], lon: d[3], lat: d[4] }));
 
-const LON0 = 94.8, LAT0 = 7.4, DLON = 0.2, DLAT = DLON * Math.sqrt(3) / 2;
+const LON0 = 94.8, LAT0 = 7.4, DLON = 0.15, DLAT = DLON * Math.sqrt(3) / 2;
 const COLS = Math.ceil((141.6 - LON0) / DLON), ROWS = Math.ceil((LAT0 + 11.4) / DLAT);
 const EAST_LIMIT = 141.0; // perbatasan Papua
 const cellLon = (c, r) => LON0 + (c + 0.5 * (r & 1)) * DLON;
