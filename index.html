@@ -248,7 +248,13 @@ html,body{height:100%}
 .sect{font-family:var(--f-display);font-weight:400;font-size:22px;letter-spacing:.02em;margin:0}
 .profile .sect{font-size:20px}
 .secbody{padding:0 18px 18px;display:flex;flex-direction:column;gap:10px}
-.prose p{margin:0;max-width:68ch}
+.prose{display:flex;flex-direction:column;gap:10px;min-width:0}
+.prose p{margin:0}
+.about{display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,340px);gap:12px 28px;align-items:start}
+.aboutfig{grid-column:2;grid-row:1;margin:0;position:sticky;top:12px;display:flex;flex-direction:column;gap:6px}
+.aboutfig img{display:block;width:100%;height:auto;border-radius:10px;box-shadow:0 10px 30px #0b0f2433}
+.aboutfig figcaption{font-size:12px;color:var(--muted);text-align:center}
+.about .prose{grid-column:1;grid-row:1}
 .prose .lead{font-size:17px;line-height:1.55}
 .rules{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
 .rules section{border-left:3px solid var(--gold);padding:2px 0 2px 12px}
@@ -273,6 +279,9 @@ html,body{height:100%}
 }
 @media (max-width:640px){
   .clock{border:0;padding:0;min-width:0}
+  .about{grid-template-columns:1fr}
+  .aboutfig,.about .prose{grid-column:1;grid-row:auto;position:static}
+  .aboutfig img{aspect-ratio:16/9;object-fit:cover;object-position:50% 62%}
   .topact{margin-left:0;width:100%}
   .topact .btn.primary{flex:1}
   .herotext{background:color-mix(in srgb,var(--bg) 90%,transparent);border-radius:0;max-width:none}

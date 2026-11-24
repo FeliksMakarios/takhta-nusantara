@@ -400,12 +400,18 @@ function renderStart(){
       <div class="sections">
         <details class="sec" data-sec="tentang" ${secOpen('tentang', false) ? 'open' : ''}>
           <summary><h2 class="sect">Tentang Takhta Nusantara</h2></summary>
-          <div class="secbody prose">
+          <div class="secbody about">
+            <figure class="aboutfig">
+              <img src="assets/senja-nusantara.svg" alt="Ilustrasi senja di Nusantara: gunung berapi berasap, perahu pinisi di laut, gerbang candi bentar dan pohon kelapa di tepi pantai." width="400" height="520">
+              <figcaption>Senja di Nusantara, 1830. Ilustrasi untuk Takhta Nusantara.</figcaption>
+            </figure>
+            <div class="prose">
             <p class="lead">Tahun 1830. Asap Perang Jawa baru saja reda. Pangeran Diponegoro diasingkan ke Manado, dan di Batavia, Gubernur Jenderal van den Bosch menyiapkan Tanam Paksa yang akan mengubah wajah Nusantara.</p>
             <p>Di luar Jawa, ratusan kerajaan masih berdiri. Kesultanan Aceh menguasai jalur lada di ujung Sumatra. Para arumpone Bone memimpin armada Bugis yang berlayar sampai Singapura. Dewa Agung Klungkung masih dihormati sebagai raja tertinggi Bali. Sultan-sultan Ternate dan Tidore mewarisi kejayaan rempah yang dulu diperebutkan bangsa-bangsa Eropa.</p>
             <p>Satu abad ke depan, satu per satu kerajaan itu akan diuji. Ada yang memilih berunding, ada yang bertempur sampai titik darah penghabisan, ada yang bertahan dengan siasat. Kapal uap, senapan baru, dan perjanjian pendek membuat Belanda makin kuat dari tahun ke tahun. Namun dari sekolah-sekolah dan surau, tumbuh gagasan baru tentang satu bangsa yang kelak bernama Indonesia.</p>
             <p>Dalam <b>Takhta Nusantara</b>, kamu memegang takhta salah satu kerajaan itu dari 1 Januari 1830 sampai 17 Agustus 1945. Bangun negerimu, jaga wangsamu dari perebutan takhta, pilih kawan dan lawan, dan tentukan sendiri bagaimana kerajaanmu menyambut fajar kemerdekaan.</p>
             <p class="small">Peristiwa besar dan penguasa tahun 1830 diambil dari catatan sejarah. Sebagian tahun lahir hanya perkiraan dan ditandai begitu di dalam permainan. Keturunan yang lahir selama permainan adalah tokoh rekaan dengan nama yang sesuai budaya daerahnya. Begitu kamu mengambil keputusan, jalan cerita bisa berbeda dari sejarah yang sebenarnya.</p>
+            </div>
           </div>
         </details>
         <details class="sec" data-sec="cara" ${secOpen('cara', false) ? 'open' : ''}>
