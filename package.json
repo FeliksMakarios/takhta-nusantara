@@ -1,0 +1,12 @@
+{
+  "name": "takhta-nusantara",
+  "private": true,
+  "description": "Gim strategi 2D: memimpin kerajaan Nusantara dari 1830 hingga 1945.",
+  "scripts": {
+    "build-map": "node tools/build-map.js"
+  },
+  "devDependencies": {
+    "topojson-client": "3.1.0",
+    "world-atlas": "2.0.2"
+  }
+}

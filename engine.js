@@ -12,64 +12,62 @@ const fmt = n => Math.round(n).toLocaleString('id-ID');
 const sgn = n => { const r = Math.round(n); return (r >= 0 ? '+' : '') + fmt(r); };
 function roman(n){ const m=[[10,'X'],[9,'IX'],[5,'V'],[4,'IV'],[1,'I']]; let s=''; for(const [v,r] of m){ while(n>=v){ s+=r; n-=v; } } return s; }
 
-/* ---------- peta heksagonal ---------- */
-const SQ3 = Math.sqrt(3), HS = 12, PADX = 30, PADY = 24;
+/* ---------- peta heksagonal (dari map-data.js) ---------- */
+const SQ3 = Math.sqrt(3), HS = 6, PADX = 30, PADY = 24;
 function hexXY(c, r){ return [PADX + HS*SQ3*(c + 0.5*(r & 1)) + HS*SQ3/2, PADY + HS*1.5*r + HS]; }
 const DIRS_EVEN = [[1,0],[0,1],[-1,1],[-1,0],[-1,-1],[0,-1]];
 const DIRS_ODD  = [[1,0],[1,1],[0,1],[-1,0],[0,-1],[1,-1]];
-function toCube(c, r){ const q = c - (r - (r & 1)) / 2; return [q, r, -q - r]; }
-function hexDist(a, b){ const x = toCube(a.c, a.r), y = toCube(b.c, b.r); return (Math.abs(x[0]-y[0]) + Math.abs(x[1]-y[1]) + Math.abs(x[2]-y[2])) / 2; }
 
 const MAP = (() => {
-  const tiles = [], byKey = {};
-  const key = (c, r) => c + ',' + r;
-  for (const [isl, rows] of Object.entries(LAND)) for (const [lat, a, b] of rows) for (let lon = a; lon <= b; lon++) {
-    const c = lon - 95, r = 6 - lat, k = key(c, r);
-    if (byKey[k]) continue;
-    const t = { lon, lat, c, r, isl, rid: null };
-    [t.x, t.y] = hexXY(c, r);
-    tiles.push(t); byKey[k] = t;
-  }
+  const COLS = MAPDATA.cols, ROWS = MAPDATA.rows;
+  const raw = atob(MAPDATA.cells), cells = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) cells[i] = raw.charCodeAt(i);
   const regions = {};
-  for (const d of REGION_DEFS) regions[d[0]] = { id:d[0], name:d[1], isl:d[2], lon:d[3], lat:d[4], owner0:d[5], com:d[6], pop0:d[7], ter:d[8], fixed:d[9] || null, tiles:[] };
-  for (const R of Object.values(regions)) if (R.fixed) for (const [lon, lat] of R.fixed) {
-    const t = byKey[key(lon - 95, 6 - lat)]; if (t) t.rid = R.id; else console.warn('Petak tidak ada', R.id, lon, lat);
+  for (const d of REGION_DEFS) regions[d[0]] = { id:d[0], name:d[1], isl:d[2], lon:d[3], lat:d[4], owner0:d[5], com:d[6], pop0:d[7], ter:d[8], tiles:[] };
+  const idx = MAPDATA.regions;
+  const tiles = [], outside = [], grid = new Array(COLS * ROWS).fill(null);
+  for (let k = 0; k < cells.length; k++) {
+    const v = cells[k]; if (!v) continue;
+    const c = k % COLS, r = Math.floor(k / COLS), [x, y] = hexXY(c, r);
+    const t = { c, r, x, y, rid: v >= 2 ? idx[v - 2] : null, out: v === 1 };
+    if (t.rid && !regions[t.rid]) { t.rid = null; t.out = true; }
+    grid[k] = t; (t.out ? outside : tiles).push(t);
   }
-  for (const t of tiles) if (!t.rid) {
-    let best = null, bd = 1e9;
-    for (const R of Object.values(regions)) {
-      if (R.isl !== t.isl || R.fixed) continue;
-      const d = (R.lon - t.lon) ** 2 + (R.lat - t.lat) ** 2;
-      if (d < bd) { bd = d; best = R; }
-    }
-    if (best) t.rid = best.id;
-  }
-  const land = tiles.filter(t => t.rid);
-  for (const t of land) {
-    regions[t.rid].tiles.push(t);
-    const dirs = (t.r & 1) ? DIRS_ODD : DIRS_EVEN;
-    t.nb = dirs.map(([dc, dr]) => byKey[key(t.c + dc, t.r + dr)] || null).map(n => (n && n.rid) ? n : null);
-  }
-  const ids = Object.keys(regions);
-  const adj = {}, dist = {};
+  const at = (c, r) => (c < 0 || r < 0 || c >= COLS || r >= ROWS) ? null : grid[r * COLS + c];
+  for (const t of tiles.concat(outside)) t.nb = ((t.r & 1) ? DIRS_ODD : DIRS_EVEN).map(([dc, dr]) => at(t.c + dc, t.r + dr));
+  const ids = Object.keys(regions), adj = {}, dist = {};
   for (const id of ids) { adj[id] = new Set(); dist[id] = {}; }
-  for (const t of land) for (const n of t.nb) if (n && n.rid !== t.rid) adj[t.rid].add(n.rid);
-  for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) {
-    let m = 99;
-    for (const a of regions[ids[i]].tiles) for (const b of regions[ids[j]].tiles) { const d = hexDist(a, b); if (d < m) m = d; }
-    dist[ids[i]][ids[j]] = m; dist[ids[j]][ids[i]] = m;
+  for (const t of tiles) { regions[t.rid].tiles.push(t); for (const n of t.nb) if (n && n.rid && n.rid !== t.rid) adj[t.rid].add(n.rid); }
+  const rawD = atob(MAPDATA.dist), RN = idx.length;
+  for (let a = 0; a < RN; a++) for (let b = 0; b < RN; b++) {
+    if (a === b || !dist[idx[a]] || !regions[idx[b]]) continue;
+    dist[idx[a]][idx[b]] = rawD.charCodeAt(a * RN + b) / 10;
   }
   for (const R of Object.values(regions)) {
-    if (!R.tiles.length) { console.warn('Wilayah tanpa petak', R.id); continue; }
+    if (!R.tiles.length) { console.warn('Wilayah tanpa petak', R.id); R.lx = R.ly = R.cx = R.cy = 0; continue; }
+    for (const id of ids) if (dist[R.id][id] === undefined && id !== R.id) dist[R.id][id] = 99;
     R.cx = R.tiles.reduce((s, t) => s + t.x, 0) / R.tiles.length;
     R.cy = R.tiles.reduce((s, t) => s + t.y, 0) / R.tiles.length;
-    // titik label: petak yang paling dekat dengan pusat
     let bt = R.tiles[0], bd = 1e9;
     for (const t of R.tiles) { const d = (t.x - R.cx) ** 2 + (t.y - R.cy) ** 2; if (d < bd) { bd = d; bt = t; } }
     R.lx = bt.x; R.ly = bt.y;
+    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    for (const t of R.tiles) { x0 = Math.min(x0, t.x); y0 = Math.min(y0, t.y); x1 = Math.max(x1, t.x); y1 = Math.max(y1, t.y); }
+    R.bb = [x0 - HS, y0 - HS, x1 + HS, y1 + HS];
   }
-  const W = PADX * 2 + HS * SQ3 * 48, H = PADY * 2 + HS * 1.5 * 17 + HS * 2;
-  return { tiles: land, regions, adj, dist, W, H };
+  function cellAt(x, y){
+    const r0 = Math.round((y - PADY - HS) / (HS * 1.5));
+    let best = null, bd = HS * HS * 1.1;
+    for (let r = r0 - 1; r <= r0 + 1; r++) {
+      const c0 = Math.round((x - PADX - HS * SQ3 / 2) / (HS * SQ3) - 0.5 * (r & 1));
+      for (let c = c0 - 1; c <= c0 + 1; c++) { const t = at(c, r); if (!t) continue; const d = (t.x - x) ** 2 + (t.y - y) ** 2; if (d < bd) { bd = d; best = t; } }
+    }
+    return best;
+  }
+  const lonX = lon => PADX + ((lon - MAPDATA.lon0) / MAPDATA.dlon) * HS * SQ3 + HS * SQ3 / 2;
+  const latY = lat => PADY + ((MAPDATA.lat0 - lat) / (MAPDATA.dlon * SQ3 / 2)) * HS * 1.5 + HS;
+  const W = PADX * 2 + HS * SQ3 * (COLS + 1), H = PADY * 2 + HS * 1.5 * ROWS + HS;
+  return { tiles, outside, regions, adj, dist, W, H, cellAt, lonX, latY };
 })();
 
 /* ---------- keadaan permainan ---------- */
@@ -121,7 +119,7 @@ const hasTrait = (c, t) => c && c.tr.includes(t);
 
 function newGame(fid){
   G = {
-    v: 2, year: START_YEAR, player: fid, fac: {}, reg: {}, chars: {}, nextId: 1, log: [], wars: [], allies: [],
+    v: 3, year: START_YEAR, player: fid, fac: {}, reg: {}, chars: {}, nextId: 1, log: [], wars: [], allies: [],
     rel: {}, wib: 0, price: {}, priceAll: 1, flags: {}, queue: [], over: null,
     stats: { wins: 0, losses: 0, marriages: 0, dynRulers: 1, maxKas: 0, conquests: 0, yearsAtWar: 0 },
     badgesGame: [], kebangsaan: 0, mode: 'terbuka', japan: false, sel: null, truceUntil: 0
@@ -440,10 +438,10 @@ function doAIExpedition(fid, vassalOnly, help, report){
 /* ---------- kalender ---------- */
 const BULAN = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
 const T0 = Date.UTC(1830, 0, 1);
-function dateOf(t){ const d = new Date(T0 + t * 7 * 86400000); return { y: d.getUTCFullYear(), m: d.getUTCMonth(), d: d.getUTCDate() }; }
+function dateOf(t){ const d = new Date(T0 + t * 86400000); return { y: d.getUTCFullYear(), m: d.getUTCMonth(), d: d.getUTCDate() }; }
 function dateStr(t){ const x = dateOf(t ?? G.t); return `${x.d} ${BULAN[x.m]} ${x.y}`; }
 const dateKey = (y, m, d) => y * 10000 + m * 100 + (d || 1);
-function durStr(w){ if (w >= 52) return `${String(Math.round(w / 52 * 10) / 10).replace('.', ',')} tahun`; return `${Math.max(1, Math.round(w / 4.35))} bulan`; }
+function durStr(days){ if (days >= 360) return `${String(Math.round(days / 365 * 10) / 10).replace('.', ',')} tahun`; if (days >= 45) return `${Math.round(days / 30.4)} bulan`; return `${Math.max(1, Math.round(days))} hari`; }
 
 /* ---------- ekspedisi Belanda (tahun dan bulan) ---------- */
 const EXPED = [
@@ -545,12 +543,12 @@ function nearestHostile(rid, fid){
 }
 
 /* ---------- jalannya waktu ---------- */
-function advanceWeek(){
+function advanceDay(){
   if (!G || G.over) return;
   const prev = dateOf(G.t); G.t++; const cur = dateOf(G.t);
   G.year = cur.y; G.month = cur.m;
-  weeklyProjects();
-  G.wib = Math.min(WIB_MAX, G.wib + wibRate() * 12 / 52);
+  dailyProjects();
+  G.wib = Math.min(WIB_MAX, G.wib + wibRate() * 12 / 365);
   if (cur.y !== prev.y) newYear(prev.y);
   if (cur.m !== prev.m) monthly();
   dateTriggers(cur);
@@ -563,7 +561,7 @@ function monthly(){
   addKas(inc.net * M);
   if (inc.net < 0 && f.kas <= 0) {
     addStabAll(-1); f.army = Math.round(f.army * 0.98);
-    if (!G.flags.kasWarn || G.t - G.flags.kasWarn > 26) { G.flags.kasWarn = G.t; toast('Kas kosong. Gaji prajurit tertunggak dan sebagian pasukan pulang ke kampung.'); log('Kas kosong. Sebagian pasukan pulang ke kampung.', 'buruk'); }
+    if (!G.flags.kasWarn || G.t - G.flags.kasWarn > 180) { G.flags.kasWarn = G.t; toast('Kas kosong. Gaji prajurit tertunggak dan sebagian pasukan pulang ke kampung.'); log('Kas kosong. Sebagian pasukan pulang ke kampung.', 'buruk'); }
   }
   const r0 = rulerC();
   for (const rid of myRegions()) {
@@ -1103,24 +1101,24 @@ function startProject(k, rid){
   const def = PROJ[k];
   if (def.army ? armyProj() : projOf(rid)) return toast(def.army ? 'Angkatan perang sedang menjalankan program lain.' : 'Wilayah ini sedang mengerjakan proyek lain.');
   const ok = def.ok(rid); if (ok !== true) return toast(ok);
-  const weeks = def.w(rid);
+  const days = def.w(rid) * 7;
   if (!spend(0, def.wib)) return;
-  G.proj.push({ k, rid: rid || null, weeks, done: 0, cost: def.cost(rid), paid: 0, stall: false });
-  done(`${def.n} dimulai. Perkiraan selesai ${durStr(weeks)} lagi.`);
+  G.proj.push({ k, rid: rid || null, days, done: 0, cost: def.cost(rid), paid: 0, stall: false });
+  done(`${def.n} dimulai. Perkiraan selesai ${durStr(days)} lagi.`);
 }
 function cancelProject(i){
   const p = G.proj[i]; if (!p) return;
   G.proj.splice(i, 1);
   done(`${PROJ[p.k].n} dibatalkan. Biaya yang sudah keluar tidak kembali.`);
 }
-function weeklyProjects(){
+function dailyProjects(){
   for (const p of G.proj.slice()) {
     const def = PROJ[p.k];
     if (p.rid && !def.foreign && G.reg[p.rid].owner !== G.player) { G.proj.splice(G.proj.indexOf(p), 1); log(`${def.n} di ${RD(p.rid).name} terhenti karena wilayah itu jatuh.`, 'buruk'); continue; }
-    const pay = p.cost / p.weeks;
+    const pay = p.cost / p.days;
     if (P().kas < pay) { p.stall = true; continue; }
     P().kas -= pay; p.paid += pay; p.done++; p.stall = false;
-    if (p.done >= p.weeks) {
+    if (p.done >= p.days) {
       G.proj.splice(G.proj.indexOf(p), 1);
       const msg = def.fin(p.rid);
       log(msg, 'baik'); toast(msg, true);
