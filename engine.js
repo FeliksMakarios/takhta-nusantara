@@ -160,6 +160,7 @@ function newGame(fid){
     if (fid === 'klungkung' && d.culture === 'bali') r += 15;
     G.rel[id] = r;
   }
+  initDiplomacy();
   buildCourt(fid);
   G.t = 0; G.month = 0; G.wib = 24; G.proj = []; G.speed = 0; G.ownVer = 0;
   G.sel = P().cap;
@@ -316,11 +317,13 @@ function incomeBreakdown(){
   let homage = 0;
   if (D(G.player).bonus.id === 'puputan') for (const [id, d] of Object.entries(FACTION_DEFS)) if (d.culture === 'bali' && id !== G.player && alive(id) && !G.fac[id].overlord && (G.rel[id] ?? 0) >= 0) homage += 14;
   income += homage;
+  const trade = tradeIncome(gross);
+  income += trade;
   const tribute = f.overlord ? income * (G.japan ? 0.3 : 0.2) : 0;
   const upkeep = f.army * 0.02;
   const courtCost = 10 + myRegions().length * 3 + gross * 0.12;
   const loans = (G.flags.loanYears > 0) ? 60 : 0;
-  return { gross, homage, income, tribute, upkeep, court: courtCost, loans, net: income - tribute - upkeep - courtCost - loans };
+  return { gross, homage, trade, income, tribute, upkeep, court: courtCost, loans, net: income - tribute - upkeep - courtCost - loans };
 }
 function manpower(){ return Math.round(myRegions().reduce((s, r) => s + G.reg[r].pop * 8, 0)); }
 
@@ -369,14 +372,14 @@ function fight(aN, aQ, aM, dN, dQ, dM){
   return { win, ratio: r, aLoss: Math.round(aN * (win ? wl : lose)), dLoss: Math.round(dN * (win ? lose : wl)) };
 }
 /* pertahanan pemain terhadap serangan */
-function defendRegion(rid, eN, eQ){
+function defendRegion(rid, eN, eQ, w){
   const f = P(), R = G.reg[rid];
-  const militia = R.pop * 3;
-  const dN = f.army + militia;
-  const dQ = (f.army * f.quality + militia * 0.65) / Math.max(1, dN);
+  const militia = R.pop * 3, h = allyHelp(w, 0.3);
+  const dN = f.army + militia + h.n;
+  const dQ = (f.army * f.quality + militia * 0.65 + h.n * h.q) / Math.max(1, dN);
   const res = fight(eN, eQ, 1, dN, dQ, battleMod() * defenseMod(rid));
-  const armyShare = f.army / Math.max(1, dN);
-  f.army = Math.max(0, f.army - Math.round(res.dLoss * armyShare));
+  f.army = Math.max(0, f.army - Math.round(res.dLoss * f.army / Math.max(1, dN)));
+  for (const a of h.list) G.fac[a].army = Math.max(0, Math.round(G.fac[a].army - res.dLoss * (G.fac[a].army * 0.3) / Math.max(1, dN)));
   return res;
 }
 function garrisonOf(rid){
@@ -408,23 +411,26 @@ function playerAttack(rid, pct){
   if (!spend(0, WIBAWA.attack)) return null;
   const g = garrisonOf(rid);
   const dm = TERRAIN[RD(rid).ter].def * (1 + 0.3 * R.fort);
-  const res = fight(n, f.quality, battleMod(), g.n, g.q, dm);
-  f.army = Math.max(0, f.army - res.aLoss);
-  const w = warWith(owner);
+  const w = warWith(owner), h = allyHelp(w, 0.2);
+  const total = n + h.n, q = (n * f.quality + h.n * h.q) / Math.max(1, total);
+  const res = fight(total, q, battleMod(), g.n, g.q, dm);
+  f.army = Math.max(0, f.army - Math.round(res.aLoss * n / Math.max(1, total)));
+  spreadAllyLoss(h, 0.2, res.aLoss, total);
   if (owner !== 'adat' && G.fac[owner]) G.fac[owner].army = Math.max(0, G.fac[owner].army - Math.round(res.dLoss * 0.6));
   let msg;
   if (res.win) {
     G.stats.wins++; if (w) w.wins++;
     setOwner(rid, G.player); R.stab = 30; R.occ = 48; G.stats.conquests++;
+    aggression(owner === 'adat' ? 4 : owner === 'belanda' || owner === 'jepang' ? 2 : 15);
     addLegit(3);
     if (owner === 'belanda' && w) w.exh += 18;
     if (owner !== 'belanda' && owner !== 'jepang') addRel('belanda', owner === 'adat' ? -3 : -10);
-    msg = `Kemenangan! ${RD(rid).name} kini menjadi milik kerajaan. Kita kehilangan ${fmt(res.aLoss)} prajurit, musuh kehilangan ${fmt(res.dLoss)}.`;
+    msg = `Kemenangan! ${RD(rid).name} kini menjadi milik kerajaan.${h.n ? ` Pasukan sekutu (${h.list.map(a => D(a).short).join(', ')}) ikut bertempur.` : ''} Pasukan gabungan kehilangan ${fmt(res.aLoss)} orang, musuh kehilangan ${fmt(res.dLoss)}.`;
     log(`Pasukan kerajaan merebut ${RD(rid).name} dari ${facName(owner)}.`, 'baik');
   } else {
     G.stats.losses++; if (w) w.losses++;
     addLegit(-3);
-    msg = `Serangan ke ${RD(rid).name} gagal. Kita kehilangan ${fmt(res.aLoss)} prajurit, musuh kehilangan ${fmt(res.dLoss)}.`;
+    msg = `Serangan ke ${RD(rid).name} gagal.${h.n ? ` Pasukan sekutu ikut bertempur.` : ''} Pasukan gabungan kehilangan ${fmt(res.aLoss)} orang, musuh kehilangan ${fmt(res.dLoss)}.`;
     log(`Serangan ke ${RD(rid).name} dipukul mundur.`, 'buruk');
   }
   checkBadges();
@@ -432,14 +438,30 @@ function playerAttack(rid, pct){
 }
 
 /* ---------- perang dan damai ---------- */
-function startWar(fid, kind){
+function startWar(fid, kind, opts){
+  opts = opts || {};
   if (atWarWith(fid)) return;
-  G.wars.push({ enemy: fid, start: G.year, exh: 0, wins: 0, losses: 0, commit: 1, kind: kind || 'biasa' });
+  ensureDiplo();
+  const w = { enemy: fid, start: G.year, exh: 0, wins: 0, losses: 0, commit: 1, kind: kind || 'biasa', allies: [] };
+  G.wars.push(w);
   G.allies = G.allies.filter(a => a !== fid);
+  G.trade = G.trade.filter(a => a !== fid);
   if (fid === 'belanda') G.rel.belanda = Math.min(G.rel.belanda, -60); else addRel(fid, -60);
   log(`Perang pecah melawan ${D(fid).name}.`, 'buruk');
+  if (opts.noCall) return;
+  const { joined, refused } = callAllies(w);
+  const foes = opts.noEnemyAllies ? [] : enemyAlliesJoin(fid);
+  const parts = [];
+  if (joined.length) parts.push(`Sekutu yang ikut berperang bersama kita: ${joined.map(a => D(a).short).join(', ')}.`);
+  if (refused.length) parts.push(`Menolak membantu dan memutus persekutuan: ${refused.map(a => D(a).short).join(', ')}.`);
+  if (foes.length) parts.push(`Sekutu ${D(fid).short} ikut menyerang kita: ${foes.map(a => D(a).short).join(', ')}.`);
+  for (const a of joined) log(`${D(a).short} ikut berperang bersama kita melawan ${D(fid).short}.`, 'baik');
+  if (parts.length && !opts.quiet) notice(`Perang melawan ${D(fid).short}`, parts.join(' '));
+  else if (parts.length) log(parts.join(' '), 'penting');
 }
 function endWar(fid, text){
+  const w0 = warWith(fid);
+  if (w0) for (const a of (w0.allies || [])) addRel(a, 15);
   G.wars = G.wars.filter(w => w.enemy !== fid);
   if (fid === 'belanda') { G.rel.belanda = Math.max(G.rel.belanda, 0); G.truceUntil = G.year + 15; }
   else addRel(fid, 30);
@@ -533,6 +555,128 @@ function processBelanda(){
   }
 }
 
+/* ---------- persekutuan, perdagangan, dan koalisi ---------- */
+function initDiplomacy(){
+  G.trade = []; G.ae = 0; G.coalition = null; G.aalli = {};
+  for (const [a, b] of ALLIANCES_1830) {
+    if (a === G.player) G.allies.push(b); else if (b === G.player) G.allies.push(a); else G.aalli[relKey(a, b)] = 1;
+  }
+}
+function ensureDiplo(){ if (!G.trade) G.trade = []; if (G.ae === undefined) G.ae = 0; if (!G.aalli) G.aalli = {}; if (G.coalition === undefined) G.coalition = null; if (!G.aiwars) G.aiwars = []; }
+const aiAllied = (a, b) => !!(G.aalli && G.aalli[relKey(a, b)]);
+function aiAlliesOf(fid){
+  const out = [];
+  for (const k of Object.keys(G.aalli || {})) { const [a, b] = k.split('|'); if (a === fid && alive(b)) out.push(b); else if (b === fid && alive(a)) out.push(a); }
+  return out;
+}
+function blocs(){
+  const seen = new Set(), out = [];
+  const ids = [...new Set(Object.keys(G.aalli || {}).flatMap(k => k.split('|')))].filter(alive);
+  for (const id of ids) {
+    if (seen.has(id)) continue;
+    const comp = [], stack = [id];
+    while (stack.length) { const x = stack.pop(); if (seen.has(x)) continue; seen.add(x); comp.push(x); for (const y of aiAlliesOf(x)) if (!seen.has(y)) stack.push(y); }
+    if (comp.length > 1) out.push(comp);
+  }
+  return out;
+}
+const TRADE_INFO = {
+  belanda: { rate: 0.07, n: 'Kontrak dagang dengan Nederlandsche Handel-Maatschappij', d: 'Penghasilan stabil. Untuk kerajaan bawahan, kemandirian perlahan turun.' },
+  inggris: { rate: 0.09, n: 'Berdagang dengan pedagang Inggris di Singapura dan Penang', d: 'Hasil bumi laku dengan harga baik dan senapan 25 persen lebih murah, tetapi Belanda makin curiga.' }
+};
+function tradeSlots(){ return clamp(1 + Math.floor(myRegions().filter(coastal).length / 2), 1, 5); }
+const tradeRate = fid => TRADE_INFO[fid] ? TRADE_INFO[fid].rate : 0.05;
+const tradeOk = fid => fid === 'inggris' ? !G.japan : alive(fid);
+function tradeIncome(gross){ return (G.trade || []).filter(tradeOk).reduce((s, f) => s + gross * tradeRate(f), 0); }
+function allyJoinChance(a, enemy){
+  if (enemy === 'belanda' && G.fac[a].overlord) return 0;
+  if (aiAllied(a, enemy) || G.fac[a].overlord === enemy) return 0;
+  return clamp(((G.rel[a] ?? 0) - 20) / 60 + 0.4 - (enemy === 'belanda' ? 0.25 : 0), 0.05, 0.95);
+}
+/* sekutu pemain diminta ikut berperang; yang menolak memutus persekutuan */
+function callAllies(w){
+  const joined = [], refused = [];
+  for (const a of G.allies.slice()) {
+    if (a === w.enemy || !alive(a) || w.allies.includes(a)) continue;
+    if (chance(allyJoinChance(a, w.enemy))) { w.allies.push(a); joined.push(a); }
+    else { G.allies = G.allies.filter(x => x !== a); addRel(a, -15); refused.push(a); }
+  }
+  return { joined, refused };
+}
+/* sekutu pihak musuh ikut menyerang pemain */
+function enemyAlliesJoin(enemy){
+  const list = [];
+  if (enemy === 'belanda' || enemy === 'jepang') return list;
+  for (const a of aiAlliesOf(enemy)) {
+    if (a === G.player || atWarWith(a) || G.fac[a].overlord || G.allies.includes(a)) continue;
+    if (chance(0.55)) { startWar(a, 'biasa', { noCall: true, quiet: true }); list.push(a); }
+  }
+  return list;
+}
+function allyHelp(w, share){
+  const list = (w && w.allies || []).filter(a => alive(a) && G.fac[a]);
+  const n = list.reduce((s, a) => s + G.fac[a].army * share, 0);
+  const q = n ? list.reduce((s, a) => s + G.fac[a].army * share * G.fac[a].quality, 0) / n : 1;
+  return { list, n, q };
+}
+function spreadAllyLoss(h, share, loss, total){
+  for (const a of h.list) G.fac[a].army = Math.max(0, Math.round(G.fac[a].army - loss * (G.fac[a].army * share) / Math.max(1, total)));
+}
+function aggression(n){ G.ae = clamp((G.ae || 0) + n, 0, 150); }
+function processDiplomacy(){
+  ensureDiplo();
+  const M = 1 / 12;
+  // perdagangan
+  G.trade = G.trade.filter(f => tradeOk(f) && !atWarWith(f));
+  if (G.trade.includes('inggris')) addRel('belanda', -0.8);
+  if (G.trade.includes('belanda') && isVassal()) addIndep(-0.4);
+  for (const f of G.trade) if (f !== 'belanda' && f !== 'inggris') addRel(f, 0.4);
+  // persekutuan antarkerajaan lain
+  for (const [k, v] of Object.entries(G.arel)) {
+    const [a, b] = k.split('|');
+    if (a === G.player || b === G.player) continue;
+    if (G.aalli[k] && (v < 10 || !alive(a) || !alive(b))) { delete G.aalli[k]; continue; }
+    if (!G.aalli[k] && v >= 45 && alive(a) && alive(b) && !G.fac[a].overlord && !G.fac[b].overlord && chance(0.01)) { G.aalli[k] = 1; log(`${D(a).short} dan ${D(b).short} bersekutu.`, 'kabar'); }
+    G.arel[k] = v - v * 0.002;
+  }
+  // kecurigaan tetangga dan koalisi
+  G.ae = Math.max(0, G.ae - (G.wars.length ? 0.4 : 0.8));
+  if (!G.coalition && G.ae >= 50 && !isVassal()) {
+    const mine = myRegions();
+    const members = Object.keys(G.fac).filter(x => x !== G.player && D(x).kind === 'kerajaan' && alive(x) && !G.fac[x].overlord && !G.allies.includes(x) && (G.rel[x] ?? 0) < 30
+      && regionsOf(x).some(r => mine.some(m => (MAP.dist[m][r] ?? 99) <= 4)));
+    if (members.length >= 2) {
+      G.coalition = { members, since: G.year };
+      for (const a of members) { addRel(a, -25); for (const b of members) if (a < b) { G.aalli[relKey(a, b)] = 1; G.arel[relKey(a, b)] = Math.max(G.arel[relKey(a, b)] || 0, 45); } }
+      notice('Koalisi melawanmu terbentuk', `Penaklukan demi penaklukan membuat para tetangga cemas. ${members.map(m => D(m).name).join(', ')} bersumpah saling membantu melawan ${D(G.player).name}.`);
+      log(`Koalisi terbentuk melawan kita: ${members.map(m => D(m).short).join(', ')}.`, 'buruk');
+    }
+  }
+  if (G.coalition) {
+    G.coalition.members = G.coalition.members.filter(m => alive(m) && !G.fac[m].overlord);
+    if (G.ae < 25 || G.coalition.members.length < 2) { log('Koalisi para tetangga bubar.', 'baik'); G.coalition = null; }
+    else if (!G.coalition.members.some(atWarWith) && chance(0.06)) {
+      const army = G.coalition.members.reduce((s, m) => s + G.fac[m].army, 0);
+      if (army > P().army * 0.7) {
+        const [first, ...rest] = G.coalition.members;
+        startWar(first, 'koalisi', { quiet: true });
+        const w0 = warWith(first);
+        for (const m of rest) { startWar(m, 'koalisi', { noCall: true, quiet: true }); const w = warWith(m); if (w && w0) w.allies = w0.allies.slice(); }
+        notice('Koalisi menyatakan perang', `${G.coalition.members.map(m => D(m).name).join(', ')} menyerang bersama-sama.${w0 && w0.allies.length ? ` Sekutu kita yang ikut membantu: ${w0.allies.map(a => D(a).short).join(', ')}.` : ''}`);
+      }
+    }
+  }
+  // tawaran dari kerajaan lain
+  if (chance(0.025)) {
+    const cands = Object.keys(G.fac).filter(x => x !== G.player && D(x).kind === 'kerajaan' && alive(x) && !atWarWith(x));
+    const allyC = cands.filter(x => (G.rel[x] ?? 0) >= 55 && !G.allies.includes(x) && !G.fac[x].overlord && !isVassal());
+    const tradeC = cands.filter(x => (G.rel[x] ?? 0) >= 30 && !G.trade.includes(x));
+    if (allyC.length && chance(0.5)) G.queue.push({ ev: 'tawaransekutu', ctx: { fid: pick(allyC) } });
+    else if (tradeC.length && G.trade.length < tradeSlots()) G.queue.push({ ev: 'tawarandagang', ctx: { fid: pick(tradeC) } });
+  }
+  if (G.trade.length >= 3) earn('niaga');
+}
+
 /* ---------- konflik antarkerajaan tetangga ---------- */
 const relKey = (a, b) => a < b ? a + '|' + b : b + '|' + a;
 const aiAtWar = (a, b) => (G.aiwars || []).some(w => (w.a === a && w.b === b) || (w.a === b && w.b === a));
@@ -549,8 +693,10 @@ function processAIConflicts(){
     if (a === G.player || b === G.player || !alive(a) || !alive(b) || G.fac[a].overlord || G.fac[b].overlord || aiAtWar(a, b)) continue;
     if (!regionsNear(a, b).length || !chance(0.0025 + (-v - 20) / 20000)) continue;
     const [att, def] = chance(0.5) ? [a, b] : [b, a];
+    if (aiAllied(att, def)) continue;
     G.aiwars.push({ a: att, b: def, start: G.year });
     log(`Perang pecah antara ${D(att).name} dan ${D(def).name}.`, 'kabar');
+    if (G.allies.includes(def) && !atWarWith(att)) G.queue.push({ ev: 'panggilansekutu', ctx: { fid: def, enemy: att } });
   }
   for (const w of G.aiwars.slice()) {
     if (!alive(w.a) || !alive(w.b) || G.fac[w.a].overlord || G.fac[w.b].overlord) { G.aiwars.splice(G.aiwars.indexOf(w), 1); continue; }
@@ -558,7 +704,8 @@ function processAIConflicts(){
       const [att, def] = chance(0.5) ? [w.a, w.b] : [w.b, w.a];
       const targets = regionsNear(att, def); if (!targets.length) continue;
       const rid = pick(targets), R = G.reg[rid], A = G.fac[att], Df = G.fac[def];
-      const res = fight(A.army * 0.6, A.quality, 1, R.pop * 2 + Df.army * 0.4, Df.quality, TERRAIN[RD(rid).ter].def * (1 + 0.3 * R.fort));
+      const help = aiAlliesOf(def).filter(x => x !== att && !G.fac[x].overlord).reduce((s, x) => s + G.fac[x].army * 0.25, 0);
+      const res = fight(A.army * 0.6, A.quality, 1, R.pop * 2 + Df.army * 0.4 + help, Df.quality, TERRAIN[RD(rid).ter].def * (1 + 0.3 * R.fort));
       A.army = Math.max(0, A.army - res.aLoss); Df.army = Math.max(0, Df.army - Math.round(res.dLoss * 0.5));
       if (res.win && regionsOf(def).length > 1) { setOwner(rid, att); R.stab = 30; log(`${D(att).short} merebut ${RD(rid).name} dari ${D(def).short}.`, 'kabar'); }
     }
@@ -578,7 +725,7 @@ function processWars(){
         const mine = myRegions(); if (!mine.length) continue;
         const target = mine.slice().sort((a, b) => nearestHostile(a, 'belanda') - nearestHostile(b, 'belanda') || (a === P().cap) - (b === P().cap))[0];
         const E = Math.round((expSize() * 0.7 + P().army * 0.5) * w.commit);
-        const res = defendRegion(target, E, B.quality);
+        const res = defendRegion(target, E, B.quality, w);
         B.army = Math.max(4000, B.army - Math.round(res.aLoss * 0.5));
         w.exh += res.aLoss / 300;
         if (res.win && G.reg[target].fort > 0) {
@@ -595,7 +742,7 @@ function processWars(){
           toast(`Serangan Belanda di ${RD(target).name} dipatahkan.`, true);
         }
       }
-      w.exh += (9 + (G.mode === 'gerilya' ? 9 : 0)) / 12;
+      w.exh += (9 + (G.mode === 'gerilya' ? 9 : 0) + (w.allies || []).filter(alive).length * 6) / 12;
       w.commit = Math.min(2.4, w.commit + 0.015);
       if (G.over) return;
       if (w.exh >= 100 && !G.queue.some(q => q.ev === 'damaibelanda')) G.queue.push({ ev: 'damaibelanda', ctx: {} });
@@ -609,10 +756,18 @@ function processWars(){
         const mine = myRegions();
         const target = mine.slice().sort((a, b) => nearestHostile(a, w.enemy) - nearestHostile(b, w.enemy))[0];
         const n = Math.round(E.army * 0.6);
-        const res = defendRegion(target, n, E.quality);
+        const res = defendRegion(target, n, E.quality, w);
         E.army = Math.max(0, E.army - res.aLoss);
         if (res.win) { setOwner(target, w.enemy); w.losses++; G.stats.losses++; addLegit(-5); log(`${D(w.enemy).short} merebut ${RD(target).name}.`, 'buruk'); if (!G.over) notice(`${RD(target).name} jatuh`, `Pasukan ${D(w.enemy).name} merebut ${RD(target).name}.`); }
         else { w.wins++; G.stats.wins++; addLegit(2); log(`Serangan ${D(w.enemy).short} ke ${RD(target).name} gagal.`, 'baik'); toast(`Serangan ${D(w.enemy).short} ke ${RD(target).name} gagal.`, true); }
+      }
+      for (const a of (w.allies || [])) {
+        if (!alive(a) || !chance(0.04)) continue;
+        const targets = regionsNear(a, w.enemy); if (!targets.length) continue;
+        const rid = pick(targets), R = G.reg[rid], A = G.fac[a];
+        const res = fight(A.army * 0.5, A.quality, 1, R.pop * 2 + E.army * 0.3, E.quality, TERRAIN[RD(rid).ter].def * (1 + 0.3 * R.fort));
+        A.army = Math.max(0, A.army - res.aLoss); E.army = Math.max(0, E.army - Math.round(res.dLoss * 0.5));
+        if (res.win && regionsOf(w.enemy).length > 1) { setOwner(rid, a); R.stab = 30; log(`Sekutu kita, ${D(a).short}, merebut ${RD(rid).name} dari ${D(w.enemy).short}.`, 'baik'); }
       }
       E.army = Math.round(E.army + regionsOf(w.enemy).reduce((s, r) => s + G.reg[r].pop, 0) * 0.033);
       w.exh += 10 / 12;
@@ -674,6 +829,7 @@ function monthly(){
     if (chance(0.04 / 12)) { F.regnalN++; F.rulerName = aiRulerName(id); }
   }
   processAIConflicts();
+  processDiplomacy();
   for (const id of Object.keys(G.rel)) { if (id === 'belanda') continue; G.rel[id] += (10 - G.rel[id]) * 0.0025; }
   for (const a of G.allies.slice()) if (!alive(a)) G.allies = G.allies.filter(x => x !== a);
 
@@ -850,6 +1006,28 @@ const EVENTS = {
     opts: [{ t: 'Mulai memerintah', fx: () => '' }] },
 
   kabar: { title: c => c.title, text: c => esc(c.text), opts: [{ t: 'Lanjutkan', fx: () => '' }] },
+
+  tawaransekutu: {
+    title: c => `${D(c.fid).short} mengajak bersekutu`,
+    text: c => `Utusan ${D(c.fid).name} datang membawa surat dan hadiah. Mereka menawarkan persekutuan: saling membantu bila salah satu diserang.`,
+    opts: [
+      { t: 'Terima persekutuan', h: 'Sekutu ikut membantu dalam perang, dan bisa meminta bantuan kita', ok: c => alive(c.fid) && !isVassal(), fx: c => { if (!G.allies.includes(c.fid)) G.allies.push(c.fid); addRel(c.fid, 10); log(`Persekutuan dengan ${D(c.fid).name} disepakati.`, 'baik'); return `${D(c.fid).short} kini sekutu kita.`; } },
+      { t: 'Tolak dengan halus', h: 'Hubungan -5', fx: c => { addRel(c.fid, -5); return 'Utusan pulang dengan tangan kosong.'; } }
+    ] },
+  tawarandagang: {
+    title: c => `${D(c.fid).short} menawarkan perjanjian dagang`,
+    text: c => `Para saudagar ${D(c.fid).name} ingin berdagang lebih bebas di pelabuhan kita. Perjanjian dagang menambah penghasilan setiap bulan.`,
+    opts: [
+      { t: 'Terima', h: 'Penghasilan naik, memakai satu jalur dagang', ok: c => alive(c.fid) && (G.trade || []).length < tradeSlots(), fx: c => { ensureDiplo(); if (!G.trade.includes(c.fid)) G.trade.push(c.fid); addRel(c.fid, 5); checkBadges(); return `Perjanjian dagang dengan ${D(c.fid).short} berlaku.`; } },
+      { t: 'Tolak', h: 'Tidak ada perubahan', fx: () => 'Tawaran itu ditolak.' }
+    ] },
+  panggilansekutu: {
+    title: c => `${D(c.fid).short} meminta bantuan`,
+    text: c => `${D(c.enemy).name} menyerang sekutu kita, ${D(c.fid).name}. Utusan mereka mengingatkan sumpah persekutuan dan meminta kita ikut berperang.`,
+    opts: [
+      { t: 'Ikut berperang', h: `Perang dengan penyerang, sekutu bertempur di pihak kita`, ok: c => !isVassal() && alive(c.enemy) && alive(c.fid), fx: c => { startWar(c.enemy, 'biasa', { quiet: true, noEnemyAllies: true }); const w = warWith(c.enemy); if (w && !w.allies.includes(c.fid)) w.allies.push(c.fid); addRel(c.fid, 15); addLegit(3); return `Kita berperang bersama ${D(c.fid).short} melawan ${D(c.enemy).short}.`; } },
+      { t: 'Tolak', h: 'Persekutuan putus, hubungan -25 (bawahan Belanda tidak dihukum)', fx: c => { if (isVassal()) return 'Belanda melarang kita ikut berperang. Sekutu kita memaklumi.'; G.allies = G.allies.filter(a => a !== c.fid); addRel(c.fid, -25); addLegit(-3); return `Persekutuan dengan ${D(c.fid).short} berakhir.`; } }
+    ] },
 
   tanampaksa: { hist: true,
     title: () => 'Tanam Paksa diberlakukan',
@@ -1155,6 +1333,7 @@ const NEWS = [
     for (const r of Object.keys(G.reg)) if (G.reg[r].owner === 'belanda') G.reg[r].owner = 'jepang';
     for (const f of Object.values(G.fac)) if (f.overlord === 'belanda') f.overlord = 'jepang';
     G.wars = G.wars.filter(w => w.enemy !== 'belanda');
+    if (G.trade) G.trade = G.trade.filter(f => f !== 'belanda' && f !== 'inggris');
     G.rel.jepang = 0; G.ownVer = (G.ownVer || 0) + 1;
     news('Hindia Belanda menyerah kepada Jepang di Kalijati.');
   } }
@@ -1182,7 +1361,7 @@ const COST = {
   relief: rid => C(40 + G.reg[rid].pop * 0.1),
   embrace: rid => C(80 + G.reg[rid].pop),
   train: () => C(40 + P().army * 0.01),
-  rifles: () => Math.round(C(120 + P().army * 0.04) * (G.year >= 1870 ? 1.5 : 1)),
+  rifles: () => Math.round(C(120 + P().army * 0.04) * (G.year >= 1870 ? 1.5 : 1) * ((G.trade || []).includes('inggris') ? 0.75 : 1)),
   gift: () => C(60), marry: () => C(40), marryRuler: () => C(50), prestige: () => C(100)
 };
 
@@ -1249,7 +1428,7 @@ function dailyProjects(){
 }
 
 /* ---------- tindakan pemain ---------- */
-const WIBAWA = { relief: 5, gift: 5, ally: 8, war: 10, peace: 5, marry: 8, marryRuler: 8, prestige: 10, independence: 15, attack: 6 };
+const WIBAWA = { relief: 5, gift: 5, ally: 8, trade: 8, callally: 4, war: 10, peace: 5, marry: 8, marryRuler: 8, prestige: 10, independence: 15, attack: 6 };
 const ACT = {
   develop(rid){ startProject('develop', rid); },
   fort(rid){ startProject('fort', rid); },
@@ -1262,8 +1441,37 @@ const ACT = {
   relief(rid){ const R = G.reg[rid]; if (!spend(COST.relief(rid), WIBAWA.relief)) return; R.stab = Math.min(100, R.stab + 15); addLegit(1); done(`Beras dibagikan di ${RD(rid).name}.`); },
   disband(){ const f = P(); if (f.army < 500) return toast('Pasukan terlalu sedikit.'); f.army -= 500; done('500 prajurit dibebaskan pulang ke desa.'); },
   gift(fid){ if (!spend(COST.gift(), WIBAWA.gift)) return; const duta = councilOf('duta'); addRel(fid, 10 + Math.max(0, stat(duta, 'dip') - 5) + (D(G.player).bonus.id === 'diplomasi' ? 4 : 0)); done(`Hadiah dikirim ke ${D(fid).short}.`); },
-  ally(fid){ if (G.rel[fid] < 40) return toast('Hubungan belum cukup baik. Butuh minimal 40.'); if (!spend(0, WIBAWA.ally)) return; const duta = councilOf('duta'); const p = clamp((G.rel[fid] - 25) / 60 + stat(duta, 'dip') * 0.02, 0.1, 0.9); if (chance(p)) { G.allies.push(fid); addRel(fid, 10); log(`Persekutuan dengan ${D(fid).name} disepakati.`, 'baik'); done(`${D(fid).short} kini sekutu kita.`); } else { addRel(fid, -5); done(`${D(fid).short} belum bersedia bersekutu.`); } },
-  war(fid){ if (isVassal()) return toast('Kerajaan bawahan tidak boleh berperang tanpa izin Belanda.'); if (G.fac[fid].overlord) return toast(`${D(fid).short} berada di bawah perlindungan ${facName(G.fac[fid].overlord)}.`); if (!spend(0, WIBAWA.war)) return; if (G.allies.includes(fid)) addLegit(-12); startWar(fid); addRel('belanda', -6); done(`Perang dinyatakan terhadap ${D(fid).short}.`); },
+  ally(fid){
+    if (isVassal()) return toast('Belanda melarang kerajaan bawahan membuat persekutuan militer.');
+    if (G.fac[fid].overlord) return toast(`${D(fid).short} berada di bawah perlindungan ${facName(G.fac[fid].overlord)} dan tidak bebas bersekutu.`);
+    if (G.rel[fid] < 40) return toast('Hubungan belum cukup baik. Butuh minimal 40.');
+    if (!spend(0, WIBAWA.ally)) return;
+    const duta = councilOf('duta'); const p = clamp((G.rel[fid] - 25) / 60 + stat(duta, 'dip') * 0.02 - (G.ae || 0) / 200, 0.1, 0.9);
+    if (chance(p)) { G.allies.push(fid); addRel(fid, 10); log(`Persekutuan dengan ${D(fid).name} disepakati.`, 'baik'); done(`${D(fid).short} kini sekutu kita.`); }
+    else { addRel(fid, -5); done(`${D(fid).short} belum bersedia bersekutu.`); } },
+  unally(fid){ G.allies = G.allies.filter(a => a !== fid); for (const w of G.wars) w.allies = (w.allies || []).filter(a => a !== fid); addRel(fid, -20); addLegit(-2); log(`Persekutuan dengan ${D(fid).name} diputus.`, 'buruk'); done(`Persekutuan dengan ${D(fid).short} diputus.`); },
+  callally(fid){
+    const w = G.wars.find(x => x.enemy !== fid && !(x.allies || []).includes(fid)); if (!w) return toast('Tidak ada perang yang bisa dibantu.');
+    if (!spend(0, WIBAWA.callally)) return;
+    if (chance(allyJoinChance(fid, w.enemy))) { w.allies = w.allies || []; w.allies.push(fid); log(`${D(fid).short} bergabung dalam perang melawan ${D(w.enemy).short}.`, 'baik'); done(`${D(fid).short} ikut berperang melawan ${D(w.enemy).short}.`); }
+    else { addRel(fid, -5); done(`${D(fid).short} belum mau ikut berperang.`); } },
+  trade(fid){
+    ensureDiplo();
+    if (G.trade.includes(fid)) return;
+    if (G.trade.length >= tradeSlots()) return toast(`Semua jalur dagang sudah terpakai (${tradeSlots()}). Tambah wilayah pesisir untuk membuka jalur baru.`);
+    if (fid === 'inggris' && isVassal()) return toast('Belanda melarang kerajaan bawahan berdagang langsung dengan Inggris.');
+    if (fid === 'inggris' && !myRegions().some(coastal)) return toast('Kerajaan tidak punya pelabuhan untuk berdagang dengan Inggris.');
+    if (fid !== 'inggris' && fid !== 'belanda' && (G.rel[fid] ?? 0) < 20) return toast('Hubungan belum cukup baik. Butuh minimal 20.');
+    if (!spend(0, WIBAWA.trade)) return;
+    const duta = councilOf('duta');
+    const p = (fid === 'inggris' || fid === 'belanda') ? 1 : clamp((G.rel[fid] ?? 0) / 80 + 0.35 + stat(duta, 'dip') * 0.02, 0.1, 0.95);
+    if (!chance(p)) { done(`${D(fid).short} belum bersedia membuat perjanjian dagang.`); return; }
+    G.trade.push(fid); addRel(fid, 5);
+    if (fid === 'inggris') addRel('belanda', -10);
+    log(`Perjanjian dagang dengan ${D(fid).name} disepakati.`, 'baik'); checkBadges();
+    done(`Perjanjian dagang dengan ${D(fid).short} berlaku.`); },
+  untrade(fid){ G.trade = (G.trade || []).filter(x => x !== fid); if (fid !== 'inggris' && fid !== 'belanda') addRel(fid, -10); done(`Perjanjian dagang dengan ${D(fid).short} dihentikan.`); },
+  war(fid){ if (isVassal()) return toast('Kerajaan bawahan tidak boleh berperang tanpa izin Belanda.'); if (G.fac[fid].overlord) return toast(`${D(fid).short} berada di bawah perlindungan ${facName(G.fac[fid].overlord)}.`); if (!spend(0, WIBAWA.war)) return; if (G.allies.includes(fid)) addLegit(-12); aggression(5); startWar(fid); addRel('belanda', -6); done(`Perang dinyatakan terhadap ${D(fid).short}.`); },
   peace(fid){ const w = warWith(fid); if (!w) return; if (!spend(0, WIBAWA.peace)) return;
     if (fid === 'belanda') { if (w.exh >= 50 && chance(w.exh / 130)) { G.queue.push({ ev: 'damaibelanda', ctx: {} }); renderAll(); runQueue(); return; } return done('Belanda menolak berunding. Mereka menuntut penyerahan.'); }
     const p = clamp(0.25 + w.wins * 0.15 + w.exh / 150 - w.losses * 0.1, 0.05, 0.9);

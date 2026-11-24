@@ -327,6 +327,15 @@ const MV = {
       ctx.lineWidth = 3; ctx.strokeStyle = cssVar('--halo'); ctx.strokeText(txt, x, y); ctx.fillStyle = color; ctx.fillText(txt, x, y);
     };
     const ink = cssVar('--labink'), disp = cssVar('--f-display'), body = cssVar('--f-body');
+    // garis persekutuan (hijau) dan jalur dagang (emas putus-putus) dari ibu kota kita
+    const capOf = fid => { if (fid === 'inggris') return [MAP.lonX(103.85), MAP.latY(1.29)]; const c = G.fac[fid] && G.fac[fid].cap; return c && G.reg[c] && G.reg[c].owner === fid ? [RD(c).lx, RD(c).ly] : null; };
+    const home = capOf(G.player);
+    if (home) {
+      const [hx, hy] = S(home[0], home[1]);
+      const line = (fid, color, dash, off) => { const c = capOf(fid); if (!c) return; const [x, y] = S(c[0], c[1]); ctx.beginPath(); ctx.setLineDash(dash); ctx.moveTo(hx + off, hy + off); ctx.lineTo(x + off, y + off); ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.globalAlpha = 0.85; ctx.stroke(); ctx.globalAlpha = 1; ctx.setLineDash([]); ctx.beginPath(); ctx.arc(x + off, y + off, 3, 0, 7); ctx.fillStyle = color; ctx.fill(); };
+      for (const a of G.allies) if (alive(a)) line(a, cssVar('--ok'), [], 0);
+      for (const t of (G.trade || [])) line(t, cssVar('--gold'), [6, 4], 3);
+    }
     for (const p of G.proj) if (p.rid) { const R = RD(p.rid), [x, y] = S(R.lx, R.ly); ctx.beginPath(); ctx.arc(x + 9, y + 7, 3.5, 0, 7); ctx.fillStyle = cssVar('--gold'); ctx.fill(); ctx.lineWidth = 1.2; ctx.strokeStyle = cssVar('--halo'); ctx.stroke(); }
     const capR = P().cap ? RD(P().cap) : null;
     if (capR) { const [x, y] = S(capR.lx, capR.ly); ctx.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? 2.6 : 6; ctx.lineTo(x + rr * Math.cos(a), y + rr * Math.sin(a)); } ctx.closePath(); ctx.fillStyle = cssVar('--gold'); ctx.fill(); ctx.lineWidth = 1.2; ctx.strokeStyle = cssVar('--halo'); ctx.stroke(); }
@@ -410,6 +419,9 @@ function renderStart(){
             <section><h3>Ekonomi</h3><p>Penghasilan datang setiap bulan dari penduduk, kemakmuran, dan harga hasil bumi yang naik turun mengikuti sejarah. Pajak berat menambah kas tetapi membuat rakyat dan bangsawan gelisah. Kerajaan bawahan wajib menyetor upeti.</p></section>
             <section><h3>Istana dan wangsa</h3><p>Raja menua dan wafat. Tetapkan pewaris, didik anak-anak sejak usia 6 tahun, dan nikahkan mereka untuk mempererat hubungan dengan kerajaan lain. Isi dewan kerajaan dengan orang yang cakap, dan awasi kesetiaan bangsawan agar tidak membelot.</p></section>
             <section><h3>Diplomasi dan perang</h3><p>Kirim hadiah, ajak bersekutu, atau nyatakan perang terhadap kerajaan tetangga. Serangan hanya bisa menjangkau wilayah yang dekat dengan wilayahmu. Wilayah adat bisa dirangkul dengan damai atau ditaklukkan.</p></section>
+            <section><h3>Persekutuan</h3><p>Sekutu diminta ikut berperang setiap kali perang pecah, lalu membantu bertahan, ikut menyerang, dan merebut wilayah musuh. Sekutu yang menolak memutus persekutuan. Sebaliknya, sekutu bisa meminta bantuanmu, dan sekutu musuh bisa ikut menyerangmu.</p></section>
+            <section><h3>Perdagangan</h3><p>Perjanjian dagang menambah penghasilan setiap bulan. Jumlah jalur dagang tergantung banyaknya wilayah pesisir. Berdagang dengan Belanda aman tetapi mengikis kemandirian, sedangkan berdagang dengan Inggris di Singapura lebih menguntungkan tetapi membuat Belanda curiga.</p></section>
+            <section><h3>Koalisi</h3><p>Setiap penaklukan menaikkan kecurigaan tetangga. Bila terlalu tinggi, mereka membentuk koalisi dan menyerangmu bersama-sama. Kecurigaan turun perlahan selama kamu tidak berperang.</p></section>
             <section><h3>Hindia Belanda</h3><p>Belanda makin kuat setiap tahun dan akan mengirim ultimatum. Kamu bisa tunduk, menyerahkan wilayah, atau melawan. Dalam perang, benteng harus dihancurkan dulu sebelum wilayah bisa direbut, dan perang gerilya membuat Belanda cepat lelah. Bila kelelahan perang mereka mencapai 100, mereka meminta damai.</p></section>
             <section><h3>Legitimasi dan ketenteraman</h3><p>Jaga keduanya tetap tinggi. Ketenteraman yang rendah memicu pemberontakan, dan legitimasi yang rendah membuat bangsawan gelisah dan pergantian takhta berbahaya.</p></section>
             <section><h3>Level dan lencana</h3><p>Setiap akhir permainan memberi XP sesuai skor, dan setiap lencana baru memberi 60 XP. Naik level dan raih lencana tertentu untuk membuka kerajaan baru.</p></section>
@@ -587,13 +599,36 @@ function tabIstana(){
 }
 
 function tabDiplomasi(){
+  ensureDiplo();
   const f = P();
   const B = G.japan ? 'jepang' : 'belanda';
   const rb = Math.round(G.rel[B] ?? 0);
+  const inc = incomeBreakdown();
+  const tradeBtn = fid => (G.trade || []).includes(fid)
+    ? `<button class="btn sm ghost" data-a="untrade:${fid}">Hentikan dagang</button>`
+    : `<button class="btn sm ghost" data-a="trade:${fid}" ${G.trade.length >= tradeSlots() ? 'disabled' : ''}>Dagang</button>`;
+  // ringkasan jejaring
+  const ae = Math.round(G.ae || 0);
+  const coal = G.coalition ? `<p class="small warnline">Koalisi melawanmu: ${G.coalition.members.map(m => esc(D(m).short)).join(', ')}. Koalisi bubar bila kecurigaan turun di bawah 25.</p>` : '';
+  const bl = blocs().map(b => `<li>${b.map(x => `<span class="chip" style="--fc:${D(x).color}"><i class="dot"></i>${esc(D(x).short)}</span>`).join(' ')}</li>`).join('');
+  let html = `<section class="card">
+    <h3>Jejaring kerajaan</h3>
+    <dl class="facts">
+      <div><dt>Sekutu</dt><dd>${G.allies.filter(alive).length ? G.allies.filter(alive).map(a => esc(D(a).short)).join(', ') : 'Belum ada'}</dd></div>
+      <div><dt>Jalur dagang</dt><dd>${G.trade.length} dari ${tradeSlots()}</dd></div>
+      <div><dt>Hasil dagang</dt><dd>${sgn((inc.trade || 0) / 12)} f/bln</dd></div>
+      <div><dt>Mitra dagang</dt><dd>${G.trade.length ? G.trade.map(a => esc(D(a).short)).join(', ') : 'Belum ada'}</dd></div>
+      <div class="wide"><dt>Kecurigaan tetangga</dt><dd>${ae} ${bar(ae, ae >= 50 ? 'red' : 'gold')}</dd></div>
+    </dl>
+    <p class="small">Setiap penaklukan menaikkan kecurigaan kerajaan tetangga. Bila mencapai 50, mereka bisa membentuk koalisi dan menyerang bersama. Kecurigaan turun perlahan selama damai. Jumlah jalur dagang bertambah satu untuk setiap dua wilayah pesisir.</p>
+    ${coal}
+    ${bl ? `<h3>Blok kekuatan</h3><ul class="blocs">${bl}</ul>` : ''}
+  </section>`;
+  // Belanda
   let bel = `<section class="card colonial"><div class="rhead"><h2>${esc(D(B).name)}</h2><span class="chip">Hubungan ${rb}</span></div>${!G.japan ? `<p class="small">Gubernur Jenderal: ${esc(governor())}</p>` : ''}${bar((rb + 100) / 2, rb < 0 ? 'red' : 'gold')}`;
   if (atWarWith(B)) {
     const w = warWith(B);
-    bel += `<p class="small">Perang sedang berlangsung. Kelelahan perang di pihak Belanda: ${Math.round(w.exh)} dari 100. Bila mencapai 100, mereka akan meminta damai.</p><div class="acts">${actRow('Ajukan perundingan damai', 'Belanda baru mau berunding bila kelelahan perang mereka tinggi.', null, 'peace:' + B, false, `${WIBAWA.peace} wibawa`)}</div>`;
+    bel += `<p class="small">Perang sedang berlangsung. Kelelahan perang di pihak Belanda: ${Math.round(w.exh)} dari 100. Bila mencapai 100, mereka akan meminta damai.${(w.allies || []).length ? ` Sekutu yang ikut berperang: ${w.allies.map(a => esc(D(a).short)).join(', ')}.` : ''}</p><div class="acts">${actRow('Ajukan perundingan damai', 'Belanda baru mau berunding bila kelelahan perang mereka tinggi.', null, 'peace:' + B, false, `${WIBAWA.peace} wibawa`)}</div>`;
   } else if (f.overlord) {
     bel += `<p class="small">Kerajaan membayar upeti ${G.japan ? '30' : '20'} persen dari penghasilan. Kemandirian: ${Math.round(f.indep)} dari 100.</p>
       <div class="acts">${actRow('Gelar upacara kebesaran', 'Legitimasi +4, kemandirian +6, hubungan -3.', COST.prestige(), 'prestige', false, `${WIBAWA.prestige} wibawa`)}
@@ -603,18 +638,32 @@ function tabDiplomasi(){
       <div class="acts">${actRow('Kirim hadiah ke Batavia', 'Hubungan naik.', COST.gift(), 'gift:belanda', false, `${WIBAWA.gift} wibawa`)}
       ${actRow('Tanda tangani perjanjian pendek', 'Menjadi bawahan Belanda. Aman dari ekspedisi, tetapi wajib membayar upeti.', null, 'vassalAsk')}</div>`;
   }
+  if (!G.japan && !atWarWith('belanda')) bel += `<div class="act"><div><div class="al">${esc(TRADE_INFO.belanda.n)}</div><div class="ad">${esc(TRADE_INFO.belanda.d)}</div><div class="am">${G.trade.includes('belanda') ? 'Berlaku' : `${WIBAWA.trade} wibawa, memakai satu jalur dagang`}</div></div>${tradeBtn('belanda')}</div>`;
   bel += '</section>';
+  // Inggris
+  let ing = '';
+  if (!G.japan) ing = `<section class="card"><div class="rhead"><h2>Pedagang Inggris</h2>${G.trade.includes('inggris') ? '<span class="chip ok">Mitra dagang</span>' : ''}</div>
+    <div class="act"><div><div class="al">${esc(TRADE_INFO.inggris.n)}</div><div class="ad">${esc(TRADE_INFO.inggris.d)}</div><div class="am">${G.trade.includes('inggris') ? 'Berlaku. Hubungan dengan Belanda turun sedikit setiap bulan.' : isVassal() ? 'Dilarang untuk kerajaan bawahan Belanda' : `${WIBAWA.trade} wibawa, memakai satu jalur dagang`}</div></div>${isVassal() && !G.trade.includes('inggris') ? '<button class="btn sm ghost" disabled>Dagang</button>' : tradeBtn('inggris')}</div></section>`;
+  const atWar = G.wars.length > 0;
   const list = Object.keys(G.fac).filter(x => x !== G.player && D(x).kind === 'kerajaan' && alive(x))
-    .sort((a, b) => (G.rel[b] ?? 0) - (G.rel[a] ?? 0)).map(x => {
-      const rel = Math.round(G.rel[x] ?? 0), war = atWarWith(x), al = G.allies.includes(x), ov = G.fac[x].overlord;
+    .sort((a, b) => (G.allies.includes(b) - G.allies.includes(a)) || ((G.rel[b] ?? 0) - (G.rel[a] ?? 0))).map(x => {
+      const rel = Math.round(G.rel[x] ?? 0), war = atWarWith(x), al = G.allies.includes(x), ov = G.fac[x].overlord, tr = G.trade.includes(x);
+      const inCoal = G.coalition && G.coalition.members.includes(x);
+      const theirAllies = aiAlliesOf(x);
+      const joined = G.wars.some(w => (w.allies || []).includes(x));
+      const chips = [war ? '<span class="chip danger">Perang</span>' : '', al ? `<span class="chip ok">Sekutu${joined ? ', ikut berperang' : ''}</span>` : '', tr ? '<span class="chip gold">Mitra dagang</span>' : '', inCoal ? '<span class="chip danger">Koalisi</span>' : '', !war ? `<span class="chip">Hubungan ${rel}</span>` : ''].join('');
+      const btns = war ? `<button class="btn sm" data-a="peace:${x}">Ajukan damai</button>`
+        : `<button class="btn sm ghost" data-a="gift:${x}">Hadiah ${COST.gift()} f</button>${tradeBtn(x)}`
+          + (al ? `${atWar && !joined ? `<button class="btn sm ghost" data-a="callally:${x}">Ajak berperang</button>` : ''}<button class="btn sm ghost" data-a="unallyAsk:${x}">Putus sekutu</button>`
+                : `<button class="btn sm ghost" data-a="ally:${x}" ${rel < 40 || isVassal() || ov ? 'disabled' : ''}>Bersekutu</button>`)
+          + `<button class="btn sm ghost danger" data-a="warAsk:${x}" ${isVassal() || ov ? 'disabled' : ''}>Perang</button>`;
       return `<li class="dip" style="--fc:${D(x).color}">
         <div class="dh"><i class="dot"></i><b>${esc(D(x).name)}</b></div>
-        <div class="small">${esc(G.fac[x].rulerName || '')}${ov ? `. Bawahan ${esc(facName(ov))}` : ''}. ${regionsOf(x).length} wilayah, sekitar ${fmt(G.fac[x].army)} prajurit.</div>
-        <div class="drow"><span class="chip ${war ? 'danger' : al ? 'ok' : ''}">${war ? 'Perang' : al ? 'Sekutu' : 'Hubungan ' + rel}</span>
-        ${war ? `<button class="btn sm" data-a="peace:${x}">Ajukan damai</button>` : `<button class="btn sm ghost" data-a="gift:${x}">Hadiah ${COST.gift()} f</button>${!al ? `<button class="btn sm ghost" data-a="ally:${x}" ${rel < 40 ? 'disabled' : ''}>Bersekutu</button>` : ''}<button class="btn sm ghost danger" data-a="warAsk:${x}" ${isVassal() || ov ? 'disabled' : ''}>Perang</button>`}</div></li>`;
+        <div class="small">${esc(G.fac[x].rulerName || '')}${ov ? `. Bawahan ${esc(facName(ov))}` : ''}. ${regionsOf(x).length} wilayah, sekitar ${fmt(G.fac[x].army)} prajurit.${theirAllies.length ? ` Bersekutu dengan ${theirAllies.map(a => esc(D(a).short)).join(', ')}.` : ''}</div>
+        <div class="drow">${chips}</div><div class="drow">${btns}</div></li>`;
     }).join('');
   const aw = (G.aiwars || []).map(w => `<li>${esc(D(w.a).short)} melawan ${esc(D(w.b).short)}, sejak ${w.start}</li>`).join('');
-  return bel + (aw ? `<section class="card"><h3>Perang antarkerajaan</h3><ul class="report">${aw}</ul></section>` : '') + `<section class="card"><h3>Kerajaan Nusantara</h3><p class="small">Hadiah memakai ${WIBAWA.gift} wibawa, ajakan bersekutu ${WIBAWA.ally}, pernyataan perang ${WIBAWA.war}. Persekutuan butuh hubungan minimal 40. Kerajaan bawahan Belanda tidak bisa diserang.</p><ul class="diplist">${list}</ul></section>`;
+  return html + bel + ing + (aw ? `<section class="card"><h3>Perang antarkerajaan</h3><ul class="report">${aw}</ul></section>` : '') + `<section class="card"><h3>Kerajaan Nusantara</h3><p class="small">Hadiah memakai ${WIBAWA.gift} wibawa, perjanjian dagang ${WIBAWA.trade}, ajakan bersekutu ${WIBAWA.ally}, ajakan ikut berperang ${WIBAWA.callally}, pernyataan perang ${WIBAWA.war}. Dagang butuh hubungan minimal 20, persekutuan minimal 40. Sekutu diminta ikut berperang saat perang pecah. Sekutu yang menolak memutus persekutuan, dan sekutu musuh bisa ikut menyerang.</p><ul class="diplist">${list}</ul></section>`;
 }
 
 function tabMiliter(){
@@ -700,7 +749,7 @@ function handleAction(a){
   const [cmd, x, y] = a.split(':');
   switch (cmd) {
     case 'start': newGame(x); sanitize(); saveNow(); showGame(); break;
-    case 'continue': { const s = bestSave(); if (s && s.json) { try { const g = JSON.parse(s.json); if (!g.v || g.v < 3) { clearSave(); renderStart(); toast('Simpanan dari versi lama tidak cocok dengan sistem waktu yang baru. Silakan mulai permainan baru.'); break; } G = g; G.speed = 0; showGame(); } catch (e) { toast('Simpanan rusak dan tidak bisa dibuka.'); } } break; }
+    case 'continue': { const s = bestSave(); if (s && s.json) { try { const g = JSON.parse(s.json); if (!g.v || g.v < 3) { clearSave(); renderStart(); toast('Simpanan dari versi lama tidak cocok dengan sistem waktu yang baru. Silakan mulai permainan baru.'); break; } G = g; G.speed = 0; ensureDiplo(); showGame(); } catch (e) { toast('Simpanan rusak dan tidak bisa dibuka.'); } } break; }
     case 'pause': togglePause(); break;
     case 'speed': setSpeed(+x); break;
     case 'ending': showEnding(); break;
@@ -714,6 +763,7 @@ function handleAction(a){
     case 'attackOpen': attackOpen(x); break;
     case 'marryOpen': marryOpen(+x); break;
     case 'rulerMarryOpen': rulerMarryOpen(); break;
+    case 'unallyAsk': confirmBox(`Putus persekutuan dengan ${D(x).short}?`, 'Hubungan akan turun dan legitimasi sedikit berkurang.', 'Putuskan', () => ACT.unally(x)); break;
     case 'warAsk': confirmBox(`Nyatakan perang terhadap ${D(x).short}?`, `Hubungan akan rusak dan Belanda makin curiga. Peluang menang tergantung pasukan dan jangkauan.`, 'Nyatakan perang', () => ACT.war(x)); break;
     case 'vassalAsk': confirmBox('Tunduk kepada Belanda?', 'Kerajaan akan membayar upeti 20 persen dan kehilangan kebebasan berperang, tetapi aman dari ekspedisi.', 'Tanda tangani', () => ACT.vassalSign()); break;
     case 'independenceAsk': confirmBox('Nyatakan lepas?', 'Ini berarti perang dengan penguasa kolonial. Pastikan pasukan dan benteng siap.', 'Nyatakan lepas', () => ACT.independence()); break;
@@ -750,7 +800,7 @@ document.addEventListener('keydown', e => {
 function boot(data){
   mergeMeta(LS.get('tn_meta'));
   let restored = false;
-  if (data && data.G) { try { G = JSON.parse(data.G); restored = G.v >= 3; if (restored) G.speed = 0; else G = null; } catch (e) { G = null; } }
+  if (data && data.G) { try { G = JSON.parse(data.G); restored = G.v >= 3; if (restored) { G.speed = 0; ensureDiplo(); } else G = null; } catch (e) { G = null; } }
   if (restored) showGame(); else showStart();
   initCloud();
 }
