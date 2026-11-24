@@ -23,7 +23,7 @@ function localSave(){ return LS.get('tn_save'); }
 function bestSave(){ const a = localSave(), b = CLOUD.save; if (a && b) return (b.t || 0) > (a.t || 0) ? b : a; return a || b || null; }
 function saveNow(){
   if (!G || G.over) return;
-  const s = { t: Date.now(), fac: G.player, year: G.year, json: JSON.stringify(G) };
+  const s = { t: Date.now(), fac: G.player, year: G.year, date: dateStr(), json: JSON.stringify(G) };
   LS.set('tn_save', s); CLOUD.save = s; cloudWrite('save', s);
 }
 let saveTimer = null;
@@ -42,6 +42,7 @@ async function initCloud(){
     CLOUD.db = db; CLOUD.uid = uid;
     if (p.exists) mergeMeta(p.data());
     if (s.exists) { const d = s.data(); if (d && d.json) CLOUD.save = d; }
+    await loadCloudSlots(col);
     LS.set('tn_meta', META);
     if (!G) renderStart();
   } catch (e) { /* tetap jalan dengan penyimpanan lokal */ }
@@ -92,7 +93,7 @@ function sanitize(){
 function runQueue(){
   if (modalOpen || !G) return;
   const q = G.queue.shift();
-  if (!q) { if (G.over) showEnding(); return; }
+  if (!q) { if (G.over) showEnding(); else if (!LS.get('tn_tut') && !TUT) setTimeout(() => { if (!modalOpen && G && !TUT && !LS.get('tn_tut')) startTutorial(); }, 300); return; }
   const e = EVENTS[q.ev];
   if (!e) return runQueue();
   const ctx = q.ctx || {};
@@ -119,11 +120,12 @@ function panelBusy(){ const a = document.activeElement; return a && a.tagName ==
 function step(){
   loopTimer = null;
   if (!G || !G.speed || G.over) return;
-  if (modalOpen || pointerHeld) { loopTimer = setTimeout(step, 200); return; }
+  if (modalOpen || pointerHeld || TUT) { loopTimer = setTimeout(step, 200); return; }
   const ov = G.ownVer, m = G.month, np = G.proj.length;
   advanceDay(); sanitize();
   renderTop();
   if (G.ownVer !== ov || G.month !== m || G.proj.length !== np) { renderMap(); if (!panelBusy()) renderPanel(); }
+  else if ((G.armies || []).some(a => a.to || a.siege)) MV.request();
   else if ((TAB === 'wilayah' || TAB === 'militer') && (G.speed <= 2 || G.t % 7 === 0)) { if (!panelBusy()) renderPanel(); }
   if (G.queue.length || G.over) runQueue();
   schedule();
@@ -165,6 +167,13 @@ function showEnding(){
 }
 
 /* ---------- peta (canvas, bisa digeser dan diperbesar) ---------- */
+let SELARMY = null;
+function selectArmy(id){
+  SELARMY = SELARMY === id ? null : id;
+  const bar = document.getElementById('orderbar'), a = armyById(SELARMY);
+  if (bar) { bar.hidden = !a; if (a) bar.innerHTML = `<span><b>${esc(a.name)}</b> (${fmt(a.n)} prajurit) dipilih. Klik wilayah tujuan di peta.</span><button class="btn sm ghost" data-a="unselect">Batal</button>`; }
+  MV.request(); if (TAB === 'militer') renderPanel();
+}
 let LAYER = 'pemilik', TAB = 'wilayah';
 const EDGE = [[0,1],[1,2],[2,3],[3,4],[4,5],[5,0]];
 const CORNER = Array.from({ length: 6 }, (_, i) => { const a = (60 * i - 30) * Math.PI / 180; return [HS * Math.cos(a), HS * Math.sin(a)]; });
@@ -223,11 +232,23 @@ const MV = {
     const end = e => {
       const wasClick = this.drag && !this.drag.moved && this.ptrs.size === 1;
       this.ptrs.delete(e.pointerId); cv.classList.remove('dragging');
-      if (wasClick && e.type === 'pointerup') { const t = this.tileAt(e.offsetX, e.offsetY); if (t && t.rid && G) handleAction('sel:' + t.rid); }
+      if (wasClick && e.type === 'pointerup' && G) {
+        const mk = (this.markers || []).find(m => e.offsetX >= m.x0 && e.offsetX <= m.x1 && e.offsetY >= m.y0 && e.offsetY <= m.y1);
+        if (mk) { if (mk.mine) selectArmy(mk.id); else { handleAction('tab:militer'); toast(`${armyById(mk.id).name}: ${armyStatus(armyById(mk.id))}.`); } }
+        else {
+          const t = this.tileAt(e.offsetX, e.offsetY);
+          if (t && t.rid) {
+            const a = armyById(SELARMY);
+            if (a) { if (orderMove(a, t.rid)) { selectArmy(null); renderAll(); scheduleSave(); } }
+            else handleAction('sel:' + t.rid);
+          }
+        }
+      }
       if (!this.ptrs.size) this.drag = null; else if (this.drag) this.drag.pinch = this.ptrs.size > 1 ? this.pinchState() : null;
     };
     cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
     cv.addEventListener('pointerleave', () => { if (!this.ptrs.size) this.setHover(null); });
+    cv.addEventListener('pointermove', e => { if (this.ptrs.size) return; const on = (this.markers || []).some(m => e.offsetX >= m.x0 && e.offsetX <= m.x1 && e.offsetY >= m.y0 && e.offsetY <= m.y1); cv.style.cursor = on ? 'pointer' : (SELARMY ? 'crosshair' : ''); });
     cv.addEventListener('wheel', e => { e.preventDefault(); this.zoomAt(e.offsetX, e.offsetY, Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0018))); }, { passive: false });
   },
   pinchState(){ const [a, b] = [...this.ptrs.values()]; return { d: Math.max(1, Math.hypot(a[0] - b[0], a[1] - b[1])), cx: (a[0] + b[0]) / 2, cy: (a[1] + b[1]) / 2 }; },
@@ -270,6 +291,35 @@ const MV = {
     this.request();
   },
   request(){ if (this.queued || !this.cv) return; this.queued = true; requestAnimationFrame(() => { this.queued = false; this.draw(); }); },
+  drawArmies(ctx, S){
+    this.markers = [];
+    if (!G.armies) return;
+    const stack = {}, gold = cssVar('--gold'), halo = cssVar('--halo'), danger = cssVar('--danger');
+    // garis rute pasukan kita
+    for (const a of G.armies) {
+      if (!a.to) continue;
+      const [px, py] = armyPos(a), [x0, y0] = S(px, py), B = RD(a.to), [x1, y1] = S(B.lx, B.ly);
+      ctx.beginPath(); ctx.setLineDash([5, 4]); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1);
+      ctx.strokeStyle = a.owner === G.player ? gold : danger; ctx.lineWidth = 2; ctx.stroke(); ctx.setLineDash([]);
+      ctx.beginPath(); ctx.arc(x1, y1, 4, 0, 7); ctx.fillStyle = a.owner === G.player ? gold : danger; ctx.fill();
+    }
+    for (const a of G.armies) {
+      const [px, py] = armyPos(a); let [x, y] = S(px, py);
+      const key = a.to ? 'm' + a.id : a.loc; const i = stack[key] = (stack[key] ?? -1) + 1;
+      x += 14; y -= 14 + i * 22;
+      const txt = armyFmt(a.n); ctx.font = `700 11px ${cssVar('--f-mono')}`;
+      const w = Math.max(30, ctx.measureText(txt).width + 22), h = 18, x0 = x - 6, y0 = y - h / 2;
+      const mine = a.owner === G.player, sel = SELARMY === a.id;
+      ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x0, y0, w, h, 4); else ctx.rect(x0, y0, w, h);
+      ctx.fillStyle = D(a.owner).color; ctx.fill();
+      ctx.lineWidth = sel ? 3 : 1.5; ctx.strokeStyle = sel ? gold : (mine ? '#ffffff' : '#1a1f3a'); ctx.stroke();
+      // tiang panji
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x0, y0 + h + 8); ctx.strokeStyle = halo; ctx.lineWidth = 3; ctx.stroke(); ctx.strokeStyle = '#1a1f3a'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.fillStyle = '#ffffff'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(txt, x0 + 8, y + 0.5);
+      if (a.siege) { ctx.beginPath(); ctx.arc(x0 + w + 9, y, 6, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * a.siege.done / a.siege.need); ctx.strokeStyle = mine ? gold : danger; ctx.lineWidth = 3; ctx.stroke(); ctx.beginPath(); ctx.arc(x0 + w + 9, y, 6, 0, 7); ctx.strokeStyle = halo; ctx.lineWidth = 1; ctx.stroke(); }
+      this.markers.push({ id: a.id, mine, x0: x0 - 4, y0: y0 - 4, x1: x0 + w + 4, y1: y0 + h + 10 });
+    }
+  },
   hatchPattern(){
     if (!this.hatch) { const c = document.createElement('canvas'); c.width = c.height = 8; const x = c.getContext('2d'); x.strokeStyle = 'rgba(158,42,34,.6)'; x.lineWidth = 2; x.beginPath(); x.moveTo(-2, 10); x.lineTo(10, -2); x.moveTo(-2, 2); x.lineTo(2, -2); x.moveTo(6, 10); x.lineTo(10, 6); x.stroke(); this.hatch = this.ctx.createPattern(c, 'repeat'); }
     return this.hatch;
@@ -347,6 +397,7 @@ const MV = {
       label(D(fid).short, x, y - 11, `${fid === G.player ? 13 : 11.5}px ${disp}`, ink, fid === G.player);
     }
     if (k > this.fitK() * 2.2) for (const R of Object.values(MAP.regions)) { if (R.id === G.sel) continue; const [x, y] = S(R.lx, R.ly); label(R.name, x, y + 12, `600 11px ${body}`, ink, false); }
+    this.drawArmies(ctx, S);
   }
 };
 
@@ -376,7 +427,6 @@ function renderStart(){
   const el = document.getElementById('start'); if (el.hidden) return;
   const lv = levelOf(META.xp), [lo, hi] = levelRange(META.xp);
   const pct = hi ? Math.round((META.xp - lo) / (hi - lo) * 100) : 100;
-  const sv = bestSave();
   const free = PLAYABLE_ORDER.filter(f => !D(f).overlord), vassal = PLAYABLE_ORDER.filter(f => D(f).overlord);
   const badges = Object.entries(BADGES).map(([id, b]) => `<li class="badge ${META.badges[id] ? 'got' : ''}" title="${esc(b.d)}"><span class="bg">${esc(b.g)}</span><span class="bn">${esc(b.n)}</span><span class="bd">${esc(b.d)}</span></li>`).join('');
   el.innerHTML = `
@@ -393,7 +443,7 @@ function renderStart(){
         <div class="lvl"><span class="lvn">Level ${lv}</span><span class="xp">${fmt(META.xp)} XP${hi ? ` dari ${fmt(hi)}` : ''}</span></div>
         <div class="bar"><i style="width:${pct}%"></i></div>
         <p class="small">${META.games ? `${META.games} permainan selesai. Skor terbaik ${fmt(META.best)}.` : 'Belum ada permainan yang selesai. Setiap akhir permainan memberi XP sesuai skor, dan setiap lencana baru memberi 60 XP.'}</p>
-        ${sv && sv.json ? `<div class="cont"><div><b>Permainan tersimpan</b><br><span class="small">${esc(D(sv.fac).name)}, tahun ${sv.year}</span></div><button class="btn primary" data-a="continue">Lanjutkan</button></div>` : ''}
+        ${savedListHtml()}
         <h2 class="sect">Lencana</h2>
         <ul class="badges">${badges}</ul>
       </aside>
@@ -424,12 +474,14 @@ function renderStart(){
             <section><h3>Pembangunan</h3><p>Pasar dan irigasi, benteng, sekolah, dan perekrutan butuh waktu berbulan-bulan. Biayanya dicicil setiap hari. Bila kas habis, pembangunan tertunda sampai kas terisi lagi. Satu wilayah hanya bisa mengerjakan satu proyek pada satu waktu.</p></section>
             <section><h3>Ekonomi</h3><p>Penghasilan datang setiap bulan dari penduduk, kemakmuran, dan harga hasil bumi yang naik turun mengikuti sejarah. Pajak berat menambah kas tetapi membuat rakyat dan bangsawan gelisah. Kerajaan bawahan wajib menyetor upeti.</p></section>
             <section><h3>Istana dan wangsa</h3><p>Raja menua dan wafat. Tetapkan pewaris, didik anak-anak sejak usia 6 tahun, dan nikahkan mereka untuk mempererat hubungan dengan kerajaan lain. Isi dewan kerajaan dengan orang yang cakap, dan awasi kesetiaan bangsawan agar tidak membelot.</p></section>
-            <section><h3>Diplomasi dan perang</h3><p>Kirim hadiah, ajak bersekutu, atau nyatakan perang terhadap kerajaan tetangga. Serangan hanya bisa menjangkau wilayah yang dekat dengan wilayahmu. Wilayah adat bisa dirangkul dengan damai atau ditaklukkan.</p></section>
+            <section><h3>Diplomasi dan perang</h3><p>Kirim hadiah, ajak bersekutu, atau nyatakan perang terhadap kerajaan tetangga. Pasukan hanya bisa menyerang wilayah yang dekat dengan wilayahmu. Wilayah adat bisa dirangkul dengan damai atau ditaklukkan.</p></section>
+            <section><h3>Pasukan</h3><p>Pasukanmu tampil sebagai panji di peta. Klik panji, lalu klik wilayah tujuan. Perjalanan darat dan laut butuh waktu. Wilayah musuh dikepung dulu, lalu diserbu. Bila pasukan yang bermusuhan bertemu, terjadi pertempuran, dan yang kalah mundur. Pasukan bisa dipecah, digabung, dan dipulangkan.</p></section>
             <section><h3>Persekutuan</h3><p>Sekutu diminta ikut berperang setiap kali perang pecah, lalu membantu bertahan, ikut menyerang, dan merebut wilayah musuh. Sekutu yang menolak memutus persekutuan. Sebaliknya, sekutu bisa meminta bantuanmu, dan sekutu musuh bisa ikut menyerangmu.</p></section>
             <section><h3>Perdagangan</h3><p>Perjanjian dagang menambah penghasilan setiap bulan. Jumlah jalur dagang tergantung banyaknya wilayah pesisir. Berdagang dengan Belanda aman tetapi mengikis kemandirian, sedangkan berdagang dengan Inggris di Singapura lebih menguntungkan tetapi membuat Belanda curiga.</p></section>
             <section><h3>Koalisi</h3><p>Setiap penaklukan menaikkan kecurigaan tetangga. Bila terlalu tinggi, mereka membentuk koalisi dan menyerangmu bersama-sama. Kecurigaan turun perlahan selama kamu tidak berperang.</p></section>
-            <section><h3>Hindia Belanda</h3><p>Belanda makin kuat setiap tahun dan akan mengirim ultimatum. Kamu bisa tunduk, menyerahkan wilayah, atau melawan. Dalam perang, benteng harus dihancurkan dulu sebelum wilayah bisa direbut, dan perang gerilya membuat Belanda cepat lelah. Bila kelelahan perang mereka mencapai 100, mereka meminta damai.</p></section>
+            <section><h3>Hindia Belanda</h3><p>Belanda makin kuat setiap tahun dan akan mengirim ultimatum. Kamu bisa tunduk, menyerahkan wilayah, atau melawan. Ekspedisi Belanda berlayar menuju wilayahmu dan mengepungnya. Cegat dengan pasukanmu, atau andalkan benteng: setiap tingkat benteng harus diruntuhkan dulu sebelum wilayah bisa direbut. Perang gerilya membuat Belanda cepat lelah. Bila kelelahan perang mereka mencapai 100, mereka meminta damai.</p></section>
             <section><h3>Legitimasi dan ketenteraman</h3><p>Jaga keduanya tetap tinggi. Ketenteraman yang rendah memicu pemberontakan, dan legitimasi yang rendah membuat bangsawan gelisah dan pergantian takhta berbahaya.</p></section>
+            <section><h3>Simpanan dan musik</h3><p>Permainan tersimpan otomatis setiap pergantian tahun dan setiap kali waktu dijeda. Lewat Menu, kamu bisa menyimpan ke tiga slot terpisah, mengulang tutorial, dan menyalakan musik gamelan.</p></section>
             <section><h3>Level dan lencana</h3><p>Setiap akhir permainan memberi XP sesuai skor, dan setiap lencana baru memberi 60 XP. Naik level dan raih lencana tertentu untuk membuka kerajaan baru.</p></section>
           </div>
         </details>
@@ -478,6 +530,7 @@ function renderTop(){
     </dl>
     <div class="topact">${status}
       ${G.over ? '<button class="btn primary" data-a="ending">Lihat akhir kisah</button>' : ''}
+      <button class="btn ghost music" data-a="music" aria-pressed="${MUSIC.on}" title="${MUSIC.on ? 'Matikan musik' : 'Nyalakan musik gamelan'}">${MUSIC.on ? 'Musik nyala' : 'Musik'}</button>
       <button class="btn ghost" data-a="menu">Menu</button></div>`;
 }
 function renderMap(){
@@ -525,7 +578,7 @@ function tabWilayah(){
         ${mine ? `<div><dt>Sekolah</dt><dd>${R.school ? R.school + ' buah' : 'Belum ada'}</dd></div><div><dt>Hasil per tahun</dt><dd>${fmt(regionGross(rid))} f</dd></div>` : ''}
         <div class="wide"><dt>Kemakmuran</dt><dd>${Math.round(R.pros)} ${bar(R.pros, 'green')}</dd></div>
         <div class="wide"><dt>Ketenteraman</dt><dd>${Math.round(R.stab)} ${bar(R.stab, 'blue')}</dd></div>
-      </dl>`;
+      </dl>${regionArmies(rid)}`;
     if (mine) {
       const pj = projOf(rid);
       html += `${pj ? projBox(pj) : ''}<div class="acts">
@@ -534,6 +587,7 @@ function tabWilayah(){
         ${actRow('Dirikan sekolah', 'Ketenteraman +5. Setelah 1901 menumbuhkan kebangsaan.', COST.school(), 'school:' + rid, pj || R.school >= 2, pmeta('school', rid))}
         ${actRow('Rekrut 500 prajurit', 'Ketenteraman wilayah -4.', COST.recruit(), 'recruit:' + rid, pj, pmeta('recruit', rid))}
         ${actRow('Bagikan beras', 'Ketenteraman +15, legitimasi +1. Langsung terasa.', COST.relief(rid), 'relief:' + rid, false, `Segera, ${WIBAWA.relief} wibawa`)}
+        ${actRow('Kirim pasukan ke sini', 'Pasukan yang berjaga ikut bertahan bila musuh datang.', null, 'send:' + rid, false, 'Pilih pasukan')}
       </div>`;
     } else {
       const reach = inReach(rid);
@@ -542,9 +596,9 @@ function tabWilayah(){
       if (o === 'adat') {
         const pj = projOf(rid);
         html += `${pj ? projBox(pj) : ''}<div class="acts">${actRow('Rangkul secara damai', 'Kirim utusan dan hadiah kepada para pemuka adat. Peluang tergantung diplomasi.', COST.embrace(rid), 'embrace:' + rid, !reach || pj, pmeta('embrace', rid))}
-          ${actRow('Kirim ekspedisi', 'Taklukkan dengan pasukan. Membuat Belanda waspada.', null, 'attackOpen:' + rid, !reach || isVassal(), `Segera, ${WIBAWA.attack} wibawa`)}</div>`;
+          ${actRow('Kirim ekspedisi', 'Pasukan berangkat, mengepung, lalu menyerbu. Membuat Belanda waspada.', null, 'send:' + rid, !reach || isVassal(), 'Pilih pasukan')}</div>`;
       } else if (atWarWith(o)) {
-        html += `<div class="acts">${actRow('Serang wilayah ini', `Kita sedang berperang dengan ${D(o).short}.`, null, 'attackOpen:' + rid, !reach, `Segera, ${WIBAWA.attack} wibawa`)}</div>`;
+        html += `<div class="acts">${actRow('Serang wilayah ini', `Kita sedang berperang dengan ${D(o).short}. Pasukan berangkat, mengepung, lalu menyerbu.`, null, 'send:' + rid, !reach, 'Pilih pasukan')}</div>`;
       } else if (D(o).kind === 'kerajaan') {
         html += `<p class="small">Hubungan dengan ${esc(D(o).short)}: ${Math.round(G.rel[o] ?? 0)}. Buka tab Diplomasi untuk berunding atau menyatakan perang.</p>`;
       }
@@ -672,15 +726,46 @@ function tabDiplomasi(){
   return html + bel + ing + (aw ? `<section class="card"><h3>Perang antarkerajaan</h3><ul class="report">${aw}</ul></section>` : '') + `<section class="card"><h3>Kerajaan Nusantara</h3><p class="small">Hadiah memakai ${WIBAWA.gift} wibawa, perjanjian dagang ${WIBAWA.trade}, ajakan bersekutu ${WIBAWA.ally}, ajakan ikut berperang ${WIBAWA.callally}, pernyataan perang ${WIBAWA.war}. Dagang butuh hubungan minimal 20, persekutuan minimal 40. Sekutu diminta ikut berperang saat perang pecah. Sekutu yang menolak memutus persekutuan, dan sekutu musuh bisa ikut menyerang.</p><ul class="diplist">${list}</ul></section>`;
 }
 
+function armyStatus(a){
+  if (a.to) return `Menuju ${RD(a.to).name}, tiba ${durStr(a.total - a.done)} lagi`;
+  if (a.siege) return `Mengepung ${RD(a.loc).name}, ${a.siege.done} dari ${a.siege.need} hari`;
+  return `Berjaga di ${RD(a.loc).name}`;
+}
+function armyRow(a){
+  const mine = a.owner === G.player, sel = SELARMY === a.id;
+  const others = mine && !a.to && myArmies().some(b => b !== a && !b.to && b.loc === a.loc);
+  return `<li class="armyrow ${sel ? 'on' : ''}" style="--fc:${D(a.owner).color}">
+    <div class="dh"><i class="dot"></i><b>${esc(a.name)}</b><span class="small">${fmt(a.n)} prajurit${mine ? '' : `, ${esc(D(a.owner).short)}`}</span></div>
+    <div class="small">${esc(armyStatus(a))}</div>
+    ${a.siege ? bar(a.siege.done / a.siege.need * 100, mine ? 'gold' : 'red') : a.to ? bar(a.done / a.total * 100, mine ? 'blue' : 'red') : ''}
+    ${mine ? `<div class="drow"><button class="btn sm ${sel ? '' : 'ghost'}" data-a="army:${a.id}">${sel ? 'Dipilih' : 'Pilih dan kirim'}</button>
+      ${a.to ? `<button class="btn sm ghost" data-a="armyAct:stop:${a.id}">Berhenti</button>` : `<button class="btn sm ghost" data-a="armyAct:split:${a.id}" ${a.n < 400 ? 'disabled' : ''}>Pecah dua</button>`}
+      ${others ? `<button class="btn sm ghost" data-a="armyAct:merge:${a.id}">Gabungkan</button>` : ''}
+      <button class="btn sm ghost" data-a="armyAct:home:${a.id}">Pulang</button></div>` : ''}
+  </li>`;
+}
+function regionArmies(rid){
+  const list = (G.armies || []).filter(a => (a.loc === rid && !a.to) || a.to === rid);
+  if (!list.length) return '';
+  return `<div class="regarmies"><div class="small"><b>Pasukan di sini atau menuju ke sini</b></div><ul class="armylist">${list.map(armyRow).join('')}</ul></div>`;
+}
 function tabMiliter(){
   const f = P(), mp = manpower(), pg = councilOf('panglima');
   const wars = G.wars.map(w => {
     const targets = regionsOf(w.enemy).filter(inReach);
     return `<div class="war"><div class="rhead"><b>Perang melawan ${esc(D(w.enemy).name)}</b><span class="chip danger">sejak ${w.start}</span></div>
       <p class="small">Menang ${w.wins} kali, kalah ${w.losses} kali.${w.enemy === 'belanda' ? ` Kelelahan perang Belanda ${Math.round(w.exh)} dari 100.` : ''}</p>
-      ${targets.length ? `<div class="targets">${targets.map(t => `<button class="btn sm ghost" data-a="attackOpen:${t}">Serang ${esc(RD(t).name)}</button>`).join('')}</div>` : '<p class="small">Tidak ada wilayah musuh dalam jangkauan.</p>'}</div>`;
+      ${targets.length ? `<div class="targets">${targets.map(t => `<button class="btn sm ghost" data-a="send:${t}">Serang ${esc(RD(t).name)}</button>`).join('')}</div>` : '<p class="small">Tidak ada wilayah musuh dalam jangkauan.</p>'}</div>`;
   }).join('');
+  ensureArmies();
+  const mineA = myArmies(), foes = (G.armies || []).filter(a => a.owner !== G.player);
   return `<section class="card">
+      <h3>Pasukan</h3>
+      <p class="small">Pilih pasukan, lalu klik wilayah tujuan di peta. Wilayah musuh dikepung dulu sebelum diserbu. Bila dua pasukan yang bermusuhan bertemu di satu wilayah, terjadi pertempuran.</p>
+      ${mineA.length ? `<ul class="armylist">${mineA.map(armyRow).join('')}</ul>` : '<p class="small">Belum ada pasukan. Rekrut prajurit di panel wilayah.</p>'}
+      ${foes.length ? `<h3>Pasukan musuh</h3><ul class="armylist">${foes.map(armyRow).join('')}</ul>` : ''}
+    </section>
+    <section class="card">
       <h3>Angkatan perang</h3>
       <dl class="facts">
         <div><dt>Prajurit</dt><dd>${fmt(f.army)}</dd></div>
@@ -707,18 +792,22 @@ function tabKronik(){
 }
 
 /* ---------- dialog tindakan ---------- */
-function attackOpen(rid){
-  const f = P(), g = garrisonOf(rid), R = G.reg[rid];
-  const dm = TERRAIN[RD(rid).ter].def * (1 + 0.3 * R.fort);
-  const opts = [0.25, 0.5, 0.75, 1].map(p => {
-    const n = Math.round(f.army * p), ratio = (n * f.quality * battleMod()) / Math.max(1, g.n * g.q * dm);
-    const odds = ratio > 1.35 ? 'Peluang besar' : ratio > 1.05 ? 'Peluang cukup' : ratio > 0.85 ? 'Seimbang' : 'Peluang kecil';
-    return { t: `Kerahkan ${Math.round(p * 100)} persen (${fmt(n)} prajurit)`, h: odds, disabled: n < 100 || G.wib < WIBAWA.attack, fn: () => { const r = playerAttack(rid, p); if (r) { sanitize(); renderAll(); scheduleSave(); modal({ eyebrow: 'Hasil pertempuran', title: r.win ? 'Kemenangan' : 'Kekalahan', html: `<p>${esc(r.msg)}</p>`, buttons: [{ t: 'Kembali', cls: 'primary' }] }); } } };
+function sendOpen(rid){
+  ensureArmies();
+  const R = G.reg[rid], o = R.owner, hostile = o === 'adat' || atWarWith(o);
+  const g = hostile ? garrisonOf(rid) : null;
+  const armies = myArmies();
+  if (!armies.length) return toast('Kerajaan tidak punya pasukan. Rekrut prajurit dulu di panel wilayah.');
+  const buttons = armies.map(a => {
+    const why = orderProblem(a, rid), days = travelDays(a.to ? (a.done / a.total < 0.5 ? a.from : a.to) : a.loc, rid);
+    let odds = '';
+    if (g) { const ratio = (a.n * P().quality * battleMod()) / Math.max(1, g.n * 0.8 * g.q * TERRAIN[RD(rid).ter].def * (1 + 0.25 * R.fort)); odds = ratio > 1.35 ? ' Peluang serbuan besar.' : ratio > 1.05 ? ' Peluang serbuan cukup.' : ratio > 0.85 ? ' Seimbang.' : ' Peluang serbuan kecil.'; }
+    return { t: `${a.name} (${fmt(a.n)} prajurit)`, h: why || `Dari ${RD(a.to || a.loc).name}, tiba sekitar ${durStr(days)}.${hostile ? ` Pengepungan sekitar ${durStr(siegeNeed(rid))}.` : ''}${odds}`, disabled: !!why, fn: () => { orderMove(a, rid); renderAll(); scheduleSave(); } };
   });
-  opts.push({ t: 'Batal' });
-  modal({ eyebrow: R.owner === 'adat' ? 'Ekspedisi' : 'Serangan', title: `Serang ${esc(RD(rid).name)}`,
-    html: `<p>Penjaga ${esc(D(R.owner).short)} di ${esc(RD(rid).name)} diperkirakan sekitar ${fmt(g.n)} orang dengan benteng tingkat ${R.fort} dan medan ${esc(TERRAIN[RD(rid).ter].n.toLowerCase())}. Serangan memakai ${WIBAWA.attack} wibawa dan terjadi saat itu juga.</p>${R.owner === 'adat' && !G.wars.length ? '<p class="small">Menaklukkan wilayah adat membuat Belanda sedikit waspada.</p>' : ''}`,
-    buttons: opts });
+  buttons.push({ t: 'Batal' });
+  modal({ eyebrow: hostile ? (o === 'adat' ? 'Ekspedisi' : 'Serangan') : 'Gerakan pasukan', title: `Kirim pasukan ke ${esc(RD(rid).name)}`,
+    html: hostile ? `<p>Penjaga ${esc(D(o).short)} di ${esc(RD(rid).name)} diperkirakan sekitar ${fmt(g.n)} orang, dengan benteng tingkat ${R.fort} dan medan ${esc(TERRAIN[RD(rid).ter].n.toLowerCase())}. Setibanya di sana, pasukan akan mengepung lalu menyerbu.</p>${o === 'adat' ? '<p class="small">Menaklukkan wilayah adat membuat Belanda sedikit waspada.</p>' : ''}` : `<p>Pasukan akan berjaga di ${esc(RD(rid).name)}. Pasukan yang berjaga ikut bertempur bila musuh datang.</p>`,
+    buttons });
 }
 function marryOpen(cid){
   const c = CH(cid);
@@ -744,6 +833,9 @@ function confirmBox(title, text, yes, fn){ modal({ title: esc(title), html: `<p>
 function menuOpen(){
   setSpeed(0); saveNow();
   modal({ eyebrow: 'Menu', title: 'Takhta Nusantara', html: `<p>Waktu dihentikan. Permainan tersimpan otomatis setiap pergantian tahun dan setiap kali waktu dijeda.</p>`, buttons: [
+    { t: 'Simpan ke slot', h: 'Tiga slot yang tidak tertimpa simpanan otomatis', fn: () => saveSlotsOpen() },
+    { t: 'Ulangi tutorial', fn: () => startTutorial() },
+    { t: MUSIC.on ? 'Matikan musik' : 'Nyalakan musik gamelan', fn: () => MUSIC.toggle() },
     { t: 'Simpan dan kembali ke layar utama', fn: () => { saveNow(); clearTimeout(loopTimer); G = null; showStart(); } },
     { t: 'Turun takhta dan akhiri permainan', h: 'Permainan berakhir sekarang dan skor dihitung.', fn: () => confirmBox('Turun takhta?', 'Permainan ini akan berakhir dan tidak bisa dilanjutkan.', 'Ya, akhiri', () => { G.over = { kind: 'turun', text: `${charName(rulerC())} turun takhta pada ${G.year}. Kisah ${D(G.player).name} berakhir di sini.` }; showEnding(); }) },
     { t: 'Tutup' }
@@ -755,18 +847,26 @@ function handleAction(a){
   const [cmd, x, y] = a.split(':');
   switch (cmd) {
     case 'start': newGame(x); sanitize(); saveNow(); showGame(); break;
-    case 'continue': { const s = bestSave(); if (s && s.json) { try { const g = JSON.parse(s.json); if (!g.v || g.v < 3) { clearSave(); renderStart(); toast('Simpanan dari versi lama tidak cocok dengan sistem waktu yang baru. Silakan mulai permainan baru.'); break; } G = g; G.speed = 0; ensureDiplo(); showGame(); } catch (e) { toast('Simpanan rusak dan tidak bisa dibuka.'); } } break; }
+    case 'load': loadSlot(x); break;
+    case 'delslot': confirmBox(`Hapus ${slotName(x)}?`, 'Permainan di slot ini akan hilang dan tidak bisa dikembalikan.', 'Hapus', () => { deleteSlot(x); renderStart(); }); break;
+    case 'music': MUSIC.toggle(); break;
+    case 'tutorial': startTutorial(); break;
+    case 'saveslot': saveSlotsOpen(); break;
     case 'pause': togglePause(); break;
     case 'speed': setSpeed(+x); break;
     case 'ending': showEnding(); break;
     case 'menu': menuOpen(); break;
+    case 'continue': loadSlot('auto'); break;
     case 'sel': G.sel = x; TAB = 'wilayah'; renderMap(); renderPanel(); break;
     case 'zoom': if (x === 'in') MV.zoomBy(1.4); else if (x === 'out') MV.zoomBy(1 / 1.4); else if (x === 'all') MV.fitAll(); else MV.focusFaction(); break;
     case 'tab': TAB = x; renderPanel(); break;
     case 'layer': LAYER = x; renderMap(); break;
     case 'mode': G.mode = x; renderPanel(); break;
     case 'tax': ACT.tax(+x); break;
-    case 'attackOpen': attackOpen(x); break;
+    case 'attackOpen': case 'send': sendOpen(x); break;
+    case 'army': selectArmy(+x); break;
+    case 'armyAct': ARMY_ACT[x](+y); break;
+    case 'unselect': selectArmy(null); break;
     case 'marryOpen': marryOpen(+x); break;
     case 'rulerMarryOpen': rulerMarryOpen(); break;
     case 'unallyAsk': confirmBox(`Putus persekutuan dengan ${D(x).short}?`, 'Hubungan akan turun dan legitimasi sedikit berkurang.', 'Putuskan', () => ACT.unally(x)); break;
@@ -790,12 +890,14 @@ document.addEventListener('change', e => {
 });
 document.addEventListener('keydown', e => {
   const typing = e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName);
-  if (G && !modalOpen && !typing && !document.getElementById('game').hidden) {
+  if (G && !modalOpen && !TUT && !typing && !document.getElementById('game').hidden) {
     if (e.code === 'Space') { e.preventDefault(); togglePause(); return; }
     if (['1','2','3','4','5'].includes(e.key)) { setSpeed(+e.key); return; }
     if (e.key === '+' || e.key === '=') { MV.zoomBy(1.3); return; }
     if (e.key === '-') { MV.zoomBy(1 / 1.3); return; }
   }
+  if (e.key === 'Escape' && TUT) { endTutorial(); return; }
+  if (e.key === 'Escape' && !modalOpen && SELARMY) { selectArmy(null); return; }
   if (e.key === 'Escape' && modalOpen) {
     const cancel = [...document.querySelectorAll('#modal .opt')].find(b => b.textContent.trim().startsWith('Batal') || b.textContent.trim().startsWith('Tutup'));
     if (cancel) cancel.click();
@@ -810,7 +912,4 @@ function boot(data){
   if (restored) showGame(); else showStart();
   initCloud();
 }
-try { window.claude?.hot?.snapshot?.(() => ({ G: G && !G.over ? JSON.stringify(G) : null })); } catch (e) {}
-try {
-  if (window.claude?.hot?.ready) window.claude.hot.ready(boot); else boot(window.claude?.hot?.data ?? {});
-} catch (e) { boot({}); }
+/* boot() dipanggil di akhir extras.js, setelah semua berkas dimuat */
