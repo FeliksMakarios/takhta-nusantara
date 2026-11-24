@@ -375,6 +375,9 @@ const HIST_CHARS = {
   ]
 };
 
+/* Persekutuan yang sudah ada pada 1830 */
+const ALLIANCES_1830 = [['bone','soppeng'],['bone','wajo'],['soppeng','wajo'],['karangasem','buleleng'],['karangasem','lombok']];
+
 const PLAYABLE_ORDER = ['aceh','yogya','bone','banjar','ternate','batak','klungkung','siak','gowa','surakarta'];
 
 const TRAITS = {
@@ -406,7 +409,8 @@ const BADGES = {
   pemersatu:{n:'Pemersatu', d:'Menguasai 10 wilayah sekaligus.', g:'10'},
   pelita:{n:'Pelita Bangsa', d:'Memiliki 5 sekolah di seluruh wilayah.', g:'5'},
   besan:{n:'Ikatan Darah', d:'Menjalin 2 pernikahan politik dalam satu permainan.', g:'oo'},
-  merdeka:{n:'Lepas dari Belenggu', d:'Melepaskan diri dari status bawahan Hindia Belanda.', g:'*'}
+  merdeka:{n:'Lepas dari Belenggu', d:'Melepaskan diri dari status bawahan Hindia Belanda.', g:'*'},
+  niaga:{n:'Jalur Niaga', d:'Memiliki 3 perjanjian dagang sekaligus.', g:'~'}
 };
 
 const LEVELS = [0, 400, 1000, 1800, 2800, 4000, 5500, 7500, 10000];

@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 520" role="img" aria-labelledby="t d">
+  <title id="t">Senja di Nusantara, 1830</title>
+  <desc id="d">Ilustrasi senja: gunung berapi berasap, perahu pinisi berlayar di laut, gerbang candi bentar dan pohon kelapa di tepi pantai.</desc>
+  <defs>
+    <linearGradient id="langit" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#17193d"/>
+      <stop offset="0.38" stop-color="#4a2f5e"/>
+      <stop offset="0.62" stop-color="#b65a4f"/>
+      <stop offset="0.8" stop-color="#e8a24f"/>
+    </linearGradient>
+    <radialGradient id="cahaya" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fbe2a0" stop-opacity="0.95"/>
+      <stop offset="0.35" stop-color="#f3b55e" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#f3b55e" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="laut" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a3a6b"/>
+      <stop offset="1" stop-color="#0d1330"/>
+    </linearGradient>
+    <linearGradient id="kabut" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e8a24f" stop-opacity="0"/>
+      <stop offset="1" stop-color="#e8a24f" stop-opacity="0.35"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="520" fill="url(#langit)"/>
+  <!-- bintang pertama -->
+  <g fill="#fbe9c2" opacity="0.8"><circle cx="48" cy="40" r="1.2"/><circle cx="122" cy="72" r="0.9"/><circle cx="300" cy="34" r="1.1"/><circle cx="356" cy="88" r="0.8"/><circle cx="210" cy="22" r="0.9"/></g>
+  <!-- matahari -->
+  <circle cx="262" cy="318" r="120" fill="url(#cahaya)"/>
+  <circle cx="262" cy="318" r="44" fill="#fbd889"/>
+  <!-- gunung berapi jauh -->
+  <path d="M0 300 L60 262 L108 228 L132 214 L146 216 L170 236 L228 280 L290 300 L400 296 L400 340 L0 340 Z" fill="#5b3f6c" opacity="0.85"/>
+  <path d="M126 216 C120 196 132 186 128 168 C142 178 150 160 146 146 C160 160 158 180 150 196 C148 206 150 212 146 216 Z" fill="#8a6b8a" opacity="0.45"/>
+  <path d="M138 150 C128 120 150 108 142 84 C162 100 170 84 166 66" fill="none" stroke="#a98aa0" stroke-width="7" stroke-linecap="round" opacity="0.25"/>
+  <!-- perbukitan tengah -->
+  <path d="M190 318 C230 296 268 300 300 306 C334 296 370 300 400 292 L400 340 L190 340 Z" fill="#3b2d55"/>
+  <path d="M0 322 C40 306 86 308 120 318 C150 312 176 318 200 326 L200 340 L0 340 Z" fill="#33284d"/>
+  <rect y="300" width="400" height="40" fill="url(#kabut)"/>
+  <!-- laut -->
+  <rect y="336" width="400" height="184" fill="url(#laut)"/>
+  <g stroke="#f6c56b" stroke-linecap="round">
+    <line x1="236" y1="344" x2="290" y2="344" stroke-width="3" opacity="0.8"/>
+    <line x1="226" y1="354" x2="300" y2="354" stroke-width="2.5" opacity="0.6"/>
+    <line x1="242" y1="364" x2="284" y2="364" stroke-width="2.5" opacity="0.55"/>
+    <line x1="220" y1="376" x2="306" y2="376" stroke-width="2" opacity="0.4"/>
+    <line x1="246" y1="390" x2="278" y2="390" stroke-width="2" opacity="0.35"/>
+    <line x1="230" y1="406" x2="296" y2="406" stroke-width="1.5" opacity="0.25"/>
+  </g>
+  <g stroke="#7d80b8" stroke-linecap="round" opacity="0.35" stroke-width="1.5">
+    <line x1="40" y1="360" x2="80" y2="360"/><line x1="320" y1="372" x2="372" y2="372"/><line x1="120" y1="392" x2="150" y2="392"/><line x1="330" y1="420" x2="388" y2="420"/><line x1="170" y1="440" x2="220" y2="440"/>
+  </g>
+  <!-- perahu pinisi -->
+  <g transform="translate(208 300)" fill="#0f1430">
+    <path d="M-12 84 C10 98 96 98 122 82 L128 76 L-20 78 Z"/>
+    <rect x="32" y="2" width="3" height="80"/>
+    <rect x="74" y="12" width="3" height="70"/>
+    <path d="M36 6 L36 74 L4 74 Z"/>
+    <path d="M36 10 L36 70 L64 70 Z" opacity="0.92"/>
+    <path d="M78 16 L78 72 L50 72 Z" opacity="0.92"/>
+    <path d="M78 18 L78 70 L104 70 Z"/>
+    <path d="M36 8 L-26 60 L-18 62 Z"/>
+    <path d="M34 2 L36 -6 L42 -3 Z"/>
+  </g>
+  <path d="M190 386 C230 392 320 392 346 382" stroke="#f6c56b" stroke-width="1.5" fill="none" opacity="0.35"/>
+  <!-- burung -->
+  <g fill="none" stroke="#1a1838" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M300 150 q6 -6 12 0 q6 -6 12 0"/>
+    <path d="M330 176 q5 -5 10 0 q5 -5 10 0"/>
+    <path d="M280 186 q4 -4 8 0 q4 -4 8 0"/>
+  </g>
+  <!-- pantai depan, candi bentar, dan kelapa -->
+  <path d="M0 404 C46 392 98 396 148 412 C170 420 186 436 196 460 L210 520 L0 520 Z" fill="#0b0f24"/>
+  <g fill="#0b0f24">
+    <!-- candi bentar: dua menara bertingkat yang terbelah -->
+    <path d="M44 410 L44 330 L50 330 L50 318 L56 318 L56 304 L62 304 L62 292 L68 292 L68 280 L72 280 L72 410 Z"/>
+    <path d="M108 410 L108 330 L102 330 L102 318 L96 318 L96 304 L90 304 L90 292 L84 292 L84 280 L80 280 L80 410 Z"/>
+    <rect x="36" y="404" width="80" height="10"/>
+    <path d="M40 334 L76 334 L76 338 L40 338 Z M76 334 L112 334 L112 338 L76 338 Z"/>
+  </g>
+  <g stroke="#0b0f24" fill="none" stroke-linecap="round">
+    <path d="M150 470 C152 420 160 370 178 330" stroke-width="6"/>
+    <path d="M14 470 C14 430 8 396 -2 364" stroke-width="5"/>
+  </g>
+  <g fill="#0b0f24">
+    <path d="M178 330 C160 318 140 320 124 334 C142 326 160 326 176 334 Z"/>
+    <path d="M178 330 C188 312 206 306 226 312 C208 314 194 320 180 334 Z"/>
+    <path d="M178 330 C172 308 160 296 142 294 C158 302 168 314 176 332 Z"/>
+    <path d="M178 330 C194 330 210 340 218 356 C204 346 190 340 178 336 Z"/>
+    <path d="M178 330 C166 336 156 348 152 364 C162 352 170 344 180 336 Z"/>
+    <path d="M-2 364 C-14 352 -26 352 -34 360 C-22 358 -12 360 0 368 Z"/>
+    <path d="M-2 364 C6 350 20 346 34 350 C20 352 8 358 0 368 Z"/>
+    <path d="M-2 364 C10 366 20 376 24 390 C14 380 6 374 -2 370 Z"/>
+  </g>
+</svg>
