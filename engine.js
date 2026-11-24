@@ -121,8 +121,8 @@ const hasTrait = (c, t) => c && c.tr.includes(t);
 
 function newGame(fid){
   G = {
-    v: 1, year: START_YEAR, player: fid, fac: {}, reg: {}, chars: {}, nextId: 1, log: [], wars: [], allies: [],
-    rel: {}, titah: 0, titahMax: 0, price: {}, priceAll: 1, flags: {}, queue: [], over: null,
+    v: 2, year: START_YEAR, player: fid, fac: {}, reg: {}, chars: {}, nextId: 1, log: [], wars: [], allies: [],
+    rel: {}, wib: 0, price: {}, priceAll: 1, flags: {}, queue: [], over: null,
     stats: { wins: 0, losses: 0, marriages: 0, dynRulers: 1, maxKas: 0, conquests: 0, yearsAtWar: 0 },
     badgesGame: [], kebangsaan: 0, mode: 'terbuka', japan: false, sel: null, truceUntil: 0
   };
@@ -171,7 +171,7 @@ function newGame(fid){
   for (let i = 0; i < 5; i++) newChar({ fac: fid, cul, g: chance(0.85) ? 'L' : 'P', age: rint(25, 58), noble: true, adultTraits: true });
   autoCouncil();
   P().heir = defaultHeir();
-  resetTitah();
+  G.t = 0; G.month = 0; G.wib = 24; G.proj = []; G.speed = 0; G.ownVer = 0;
   G.sel = P().cap;
   G.flags.h_sambutan = 1; G.queue.push({ ev: 'sambutan', ctx: {} });
   log(`${charName(ruler)} memulai pemerintahannya atas ${pd.name}.`, 'penting');
@@ -278,19 +278,21 @@ function incomeBreakdown(){
 }
 function manpower(){ return Math.round(myRegions().reduce((s, r) => s + G.reg[r].pop * 8, 0)); }
 
-function resetTitah(){
-  const f = P(), r = rulerC(), patih = councilOf('patih');
-  let t = 3;
-  if (stat(r, 'adm') >= 7) t++;
-  if (patih && stat(patih, 'adm') >= 7) t++;
-  if (isRegency()) t--;
-  G.titah = G.titahMax = Math.max(2, t);
+const WIB_MAX = 60;
+function wibRate(){
+  const r = rulerC(), patih = councilOf('patih');
+  let w = 2;
+  if (stat(r, 'adm') >= 7) w += 0.6;
+  if (patih && stat(patih, 'adm') >= 7) w += 0.6;
+  if (hasTrait(r, 'berwibawa')) w += 0.4;
+  if (isRegency()) w -= 0.6;
+  return Math.max(1, w);
 }
-function spend(kas, titah = 1){
+function spend(kas, wib = 6){
   if (G.over) return false;
-  if (G.titah < titah) { toast('Titah tahun ini sudah habis. Akhiri tahun untuk mendapat titah baru.'); return false; }
+  if (G.wib < wib) { toast(`Wibawa belum cukup. Dibutuhkan ${wib}, tersedia ${Math.floor(G.wib)}. Wibawa bertambah setiap bulan.`); return false; }
   if (P().kas < kas) { toast(`Kas tidak cukup. Dibutuhkan ${fmt(kas)} gulden.`); return false; }
-  G.titah -= titah; P().kas -= kas; return true;
+  G.wib -= wib; P().kas -= kas; return true;
 }
 
 /* ---------- jangkauan dan pertempuran ---------- */
@@ -341,7 +343,7 @@ function garrisonOf(rid){
 
 function setOwner(rid, fid){
   const R = G.reg[rid], prev = R.owner;
-  R.owner = fid;
+  R.owner = fid; G.ownVer = (G.ownVer || 0) + 1;
   if (prev !== 'adat' && G.fac[prev] && G.fac[prev].cap === rid) {
     const rest = regionsOf(prev).sort((a, b) => G.reg[b].pop - G.reg[a].pop);
     G.fac[prev].cap = rest[0] || null;
@@ -357,7 +359,7 @@ function playerAttack(rid, pct){
   const f = P(), R = G.reg[rid], owner = R.owner;
   const n = Math.round(f.army * pct);
   if (n < 100) { toast('Pasukan terlalu sedikit untuk menyerang.'); return null; }
-  if (!spend(0, 1)) return null;
+  if (!spend(0, WIBAWA.attack)) return null;
   const g = garrisonOf(rid);
   const dm = TERRAIN[RD(rid).ter].def * (1 + 0.3 * R.fort);
   const res = fight(n, f.quality, battleMod(), g.n, g.q, dm);
@@ -367,7 +369,7 @@ function playerAttack(rid, pct){
   let msg;
   if (res.win) {
     G.stats.wins++; if (w) w.wins++;
-    setOwner(rid, G.player); R.stab = 30; R.occ = 4; G.stats.conquests++;
+    setOwner(rid, G.player); R.stab = 30; R.occ = 48; G.stats.conquests++;
     addLegit(3);
     if (owner === 'belanda' && w) w.exh += 18;
     if (owner !== 'belanda' && owner !== 'jepang') addRel('belanda', owner === 'adat' ? -3 : -10);
@@ -407,13 +409,6 @@ function becomeVassal(){
 }
 
 /* ---------- peristiwa sejarah dan ekspedisi Belanda ---------- */
-const EXPED = [
-  {y:1837,t:'minang'},{y:1846,t:'klungkung'},{y:1849,t:'klungkung'},{y:1856,r:'lampung'},{y:1858,t:'siak',v:true},
-  {y:1858,t:'jambi'},{y:1859,t:'banjar'},{y:1860,t:'bone'},{y:1873,t:'aceh'},{y:1880,t:'tidore',v:true},
-  {y:1894,t:'klungkung'},{y:1901,t:'jambi'},{y:1905,t:'bone'},{y:1905,t:'gowa'},{y:1905,t:'luwu'},{y:1906,t:'wajo'},
-  {y:1906,t:'klungkung'},{y:1907,t:'batak'},{y:1909,t:'kutai',v:true},{y:1911,t:'riau'},{y:1912,t:'bima',v:true},{y:1914,t:'ternate',v:true}
-];
-
 function isIndependent(fid){ const f = G.fac[fid]; return f && !f.overlord && alive(fid) && D(fid).kind === 'kerajaan'; }
 
 function resolveAIExpedition(fid, vassalOnly, report){
@@ -442,24 +437,35 @@ function doAIExpedition(fid, vassalOnly, help, report){
   return false;
 }
 
-function processBelanda(report){
+/* ---------- kalender ---------- */
+const BULAN = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+const T0 = Date.UTC(1830, 0, 1);
+function dateOf(t){ const d = new Date(T0 + t * 7 * 86400000); return { y: d.getUTCFullYear(), m: d.getUTCMonth(), d: d.getUTCDate() }; }
+function dateStr(t){ const x = dateOf(t ?? G.t); return `${x.d} ${BULAN[x.m]} ${x.y}`; }
+const dateKey = (y, m, d) => y * 10000 + m * 100 + (d || 1);
+function durStr(w){ if (w >= 52) return `${String(Math.round(w / 52 * 10) / 10).replace('.', ',')} tahun`; return `${Math.max(1, Math.round(w / 4.35))} bulan`; }
+
+/* ---------- ekspedisi Belanda (tahun dan bulan) ---------- */
+const EXPED = [
+  {y:1837,m:8,t:'minang'},{y:1846,m:6,t:'klungkung'},{y:1849,m:4,t:'klungkung'},{y:1856,m:8,r:'lampung'},{y:1858,m:2,t:'siak',v:true},
+  {y:1858,m:9,t:'jambi'},{y:1859,m:4,t:'banjar'},{y:1860,m:2,t:'bone'},{y:1873,m:4,t:'aceh'},{y:1880,m:6,t:'tidore',v:true},
+  {y:1894,m:7,t:'klungkung'},{y:1901,m:5,t:'jambi'},{y:1905,m:7,t:'bone'},{y:1905,m:10,t:'gowa'},{y:1905,m:11,t:'luwu'},{y:1906,m:3,t:'wajo'},
+  {y:1908,m:4,t:'klungkung'},{y:1907,m:6,t:'batak'},{y:1909,m:3,t:'kutai',v:true},{y:1911,m:2,t:'riau'},{y:1912,m:5,t:'bima',v:true},{y:1914,m:4,t:'ternate',v:true}
+];
+
+function processBelanda(){
   const B = G.fac.belanda; const y = G.year;
   if (G.japan) return;
-  B.army += 350; B.quality = Math.min(2.4, 1.4 + (y - 1830) * 0.009);
-  for (const e of EXPED.filter(e => e.y === y)) {
-    if (e.r) { if (G.reg[e.r].owner === 'adat') { setOwner(e.r, 'belanda'); report.push(`Belanda menaklukkan ${RD(e.r).name}.`); } continue; }
-    if (e.t === G.player) { if (!isVassal() && !atWarWith('belanda')) G.queue.push({ ev: 'ultimatum', ctx: { hist: true } }); continue; }
-    resolveAIExpedition(e.t, e.v, report);
-  }
+  B.army += 30; B.quality = Math.min(2.4, 1.4 + (y - 1830) * 0.009);
   // ekspedisi umum ke kerajaan lain
-  if (y > 1845 && chance(0.06 + (y - 1845) / 1500)) {
+  if (y > 1845 && chance((0.06 + (y - 1845) / 1500) / 12)) {
     const c = Object.keys(G.fac).filter(f => f !== G.player && isIndependent(f));
-    if (c.length) resolveAIExpedition(pick(c), chance(0.5), report);
+    if (c.length) resolveAIExpedition(pick(c), chance(0.5));
   }
   // wilayah adat dianeksasi perlahan
   for (const r of Object.keys(G.reg)) {
     if (G.reg[r].owner !== 'adat') continue;
-    if (chance(0.015 + (y - 1830) * 0.0012)) { setOwner(r, 'belanda'); log(`Belanda memperluas kekuasaan ke ${RD(r).name}.`, 'kabar'); }
+    if (chance((0.015 + (y - 1830) * 0.0012) / 12)) { setOwner(r, 'belanda'); log(`Belanda memperluas kekuasaan ke ${RD(r).name}.`, 'kabar'); }
   }
   // tekanan terhadap pemain
   if (!atWarWith('belanda') && y >= G.truceUntil) {
@@ -472,21 +478,23 @@ function processBelanda(report){
       if (D(G.player).bonus.id === 'tanahtinggi') p *= 0.6;
       if (y < 1860) p *= 0.5;
       if (G.rel.belanda > 50) p *= 0.4;
-      if (!G.queue.some(q => q.ev === 'ultimatum') && chance(p)) G.queue.push({ ev: 'ultimatum', ctx: {} });
-    } else if (P().overlord === 'belanda' && chance(0.13)) {
+      if (!G.queue.some(q => q.ev === 'ultimatum') && chance(p / 12)) G.queue.push({ ev: 'ultimatum', ctx: {} });
+    } else if (P().overlord === 'belanda' && chance(0.13 / 12)) {
       G.queue.push({ ev: 'tuntutan', ctx: {} });
     }
   }
 }
 
-function processWars(report){
+function notice(title, text){ G.queue.push({ ev: 'kabar', ctx: { title, text } }); }
+
+function processWars(){
   for (const w of G.wars.slice()) {
-    G.stats.yearsAtWar++;
+    G.stats.monthsAtWar = (G.stats.monthsAtWar || 0) + 1;
     if (w.enemy === 'belanda') {
       const B = G.fac.belanda;
-      const n = w.commit >= 1.75 ? 2 : 1; let lost = false;
-      for (let i = 0; i < n && !G.over; i++) {
-        const mine = myRegions(); if (!mine.length) break;
+      const perYear = w.commit >= 1.75 ? 2 : 1; let lost = false;
+      if (chance(perYear / 12)) {
+        const mine = myRegions(); if (!mine.length) continue;
         const target = mine.slice().sort((a, b) => nearestHostile(a, 'belanda') - nearestHostile(b, 'belanda') || (a === P().cap) - (b === P().cap))[0];
         const E = Math.round((expSize() * 0.7 + P().army * 0.5) * w.commit);
         const res = defendRegion(target, E, B.quality);
@@ -494,39 +502,40 @@ function processWars(report){
         w.exh += res.aLoss / 300;
         if (res.win && G.reg[target].fort > 0) {
           G.reg[target].fort--; w.losses++; G.stats.losses++; addLegit(-2); lost = true;
-          report.push(`Pasukan Belanda (${fmt(E)} serdadu) menggempur benteng ${RD(target).name}. Benteng runtuh satu tingkat, tetapi wilayah masih bertahan. Kita kehilangan ${fmt(res.dLoss)} orang.`);
-          log(`Benteng ${RD(target).name} digempur Belanda.`, 'buruk');
+          log(`Pasukan Belanda (${fmt(E)} serdadu) menggempur benteng ${RD(target).name}. Benteng runtuh satu tingkat. Kita kehilangan ${fmt(res.dLoss)} orang.`, 'buruk');
+          toast(`Benteng ${RD(target).name} digempur Belanda.`);
         } else if (res.win) {
           setOwner(target, 'belanda'); w.losses++; G.stats.losses++; addLegit(-6); lost = true;
-          report.push(`Pasukan Belanda (${fmt(E)} serdadu) merebut ${RD(target).name}. Kita kehilangan ${fmt(res.dLoss)} orang.`);
           log(`Belanda merebut ${RD(target).name}.`, 'buruk');
+          if (!G.over) notice(`${RD(target).name} jatuh`, `Pasukan Belanda berkekuatan ${fmt(E)} serdadu merebut ${RD(target).name}. Kita kehilangan ${fmt(res.dLoss)} orang dalam pertempuran.`);
         } else {
           w.wins++; G.stats.wins++; w.exh += 14 + res.aLoss / 250; addLegit(4);
-          report.push(`Serangan Belanda (${fmt(E)} serdadu) ke ${RD(target).name} berhasil dipatahkan. Musuh kehilangan ${fmt(res.aLoss)} orang.`);
-          log(`Serangan Belanda di ${RD(target).name} dipatahkan.`, 'baik');
+          log(`Serangan Belanda (${fmt(E)} serdadu) ke ${RD(target).name} dipatahkan. Musuh kehilangan ${fmt(res.aLoss)} orang.`, 'baik');
+          toast(`Serangan Belanda di ${RD(target).name} dipatahkan.`, true);
         }
       }
-      w.exh += 9 + (G.mode === 'gerilya' ? 9 : 0);
-      w.commit = Math.min(2.4, w.commit + 0.18);
-      if (!G.over && w.exh >= 100) G.queue.push({ ev: 'damaibelanda', ctx: {} });
-      else if (!G.over && lost && (myRegions().length <= 2 || w.losses >= 3) && !G.queue.some(q => q.ev === 'tawaranmenyerah')) G.queue.push({ ev: 'tawaranmenyerah', ctx: {} });
+      w.exh += (9 + (G.mode === 'gerilya' ? 9 : 0)) / 12;
+      w.commit = Math.min(2.4, w.commit + 0.015);
+      if (G.over) return;
+      if (w.exh >= 100 && !G.queue.some(q => q.ev === 'damaibelanda')) G.queue.push({ ev: 'damaibelanda', ctx: {} });
+      else if (lost && (myRegions().length <= 2 || w.losses >= 3) && !G.queue.some(q => q.ev === 'tawaranmenyerah')) G.queue.push({ ev: 'tawaranmenyerah', ctx: {} });
     } else if (w.enemy === 'jepang') {
       // tidak ada pertempuran aktif melawan Jepang
     } else {
       const E = G.fac[w.enemy];
       if (!alive(w.enemy)) { endWar(w.enemy, `Perang dengan ${D(w.enemy).name} berakhir karena musuh tidak lagi berdiri.`); continue; }
-      if (E.army > 600 && chance(0.55)) {
+      if (E.army > 600 && chance(0.55 / 12)) {
         const mine = myRegions();
         const target = mine.slice().sort((a, b) => nearestHostile(a, w.enemy) - nearestHostile(b, w.enemy))[0];
         const n = Math.round(E.army * 0.6);
         const res = defendRegion(target, n, E.quality);
         E.army = Math.max(0, E.army - res.aLoss);
-        if (res.win) { setOwner(target, w.enemy); w.losses++; G.stats.losses++; addLegit(-5); report.push(`${D(w.enemy).short} merebut ${RD(target).name}.`); log(`${D(w.enemy).short} merebut ${RD(target).name}.`, 'buruk'); }
-        else { w.wins++; G.stats.wins++; addLegit(2); report.push(`Serangan ${D(w.enemy).short} ke ${RD(target).name} gagal.`); }
+        if (res.win) { setOwner(target, w.enemy); w.losses++; G.stats.losses++; addLegit(-5); log(`${D(w.enemy).short} merebut ${RD(target).name}.`, 'buruk'); if (!G.over) notice(`${RD(target).name} jatuh`, `Pasukan ${D(w.enemy).name} merebut ${RD(target).name}.`); }
+        else { w.wins++; G.stats.wins++; addLegit(2); log(`Serangan ${D(w.enemy).short} ke ${RD(target).name} gagal.`, 'baik'); toast(`Serangan ${D(w.enemy).short} ke ${RD(target).name} gagal.`, true); }
       }
-      E.army = Math.round(E.army + regionsOf(w.enemy).reduce((s, r) => s + G.reg[r].pop, 0) * 0.4);
-      w.exh += 10;
-      if (!G.over && (w.wins >= 2 || w.exh >= 40) && chance(0.35)) G.queue.push({ ev: 'damaiai', ctx: { fid: w.enemy } });
+      E.army = Math.round(E.army + regionsOf(w.enemy).reduce((s, r) => s + G.reg[r].pop, 0) * 0.033);
+      w.exh += 10 / 12;
+      if (!G.over && (w.wins >= 2 || w.exh >= 40) && chance(0.04) && !G.queue.some(q => q.ev === 'damaiai')) G.queue.push({ ev: 'damaiai', ctx: { fid: w.enemy } });
     }
   }
 }
@@ -535,77 +544,126 @@ function nearestHostile(rid, fid){
   return Math.min(...theirs.map(t => MAP.dist[rid][t] ?? 99));
 }
 
-/* ---------- pergantian tahun ---------- */
-function processYear(){
-  const f = P(), report = [];
-  const inc = incomeBreakdown();
-  addKas(inc.net);
-  if (inc.net < 0 && f.kas <= 0) { addStabAll(-5); f.army = Math.round(f.army * 0.9); report.push('Kas kosong. Gaji prajurit tertunggak dan sebagian pasukan pulang ke kampung.'); }
-  report.push(`Penghasilan bersih tahun ${G.year}: ${sgn(inc.net)} gulden.`);
-  if (G.flags.loanYears > 0) G.flags.loanYears--;
+/* ---------- jalannya waktu ---------- */
+function advanceWeek(){
+  if (!G || G.over) return;
+  const prev = dateOf(G.t); G.t++; const cur = dateOf(G.t);
+  G.year = cur.y; G.month = cur.m;
+  weeklyProjects();
+  G.wib = Math.min(WIB_MAX, G.wib + wibRate() * 12 / 52);
+  if (cur.y !== prev.y) newYear(prev.y);
+  if (cur.m !== prev.m) monthly();
+  dateTriggers(cur);
+  checkBadges();
+}
 
-  // wilayah
+function monthly(){
+  const f = P(), M = 1 / 12;
+  const inc = incomeBreakdown();
+  addKas(inc.net * M);
+  if (inc.net < 0 && f.kas <= 0) {
+    addStabAll(-1); f.army = Math.round(f.army * 0.98);
+    if (!G.flags.kasWarn || G.t - G.flags.kasWarn > 26) { G.flags.kasWarn = G.t; toast('Kas kosong. Gaji prajurit tertunggak dan sebagian pasukan pulang ke kampung.'); log('Kas kosong. Sebagian pasukan pulang ke kampung.', 'buruk'); }
+  }
   const r0 = rulerC();
   for (const rid of myRegions()) {
     const R = G.reg[rid];
-    R.pop = R.pop * (1 + 0.006 * (R.pros / 50));
+    R.pop = R.pop * (1 + 0.006 * M * (R.pros / 50));
     const target = 45 + (f.legit ?? 60) * 0.3 + R.school * 4 + TAX[f.tax].stab * 3 - (R.occ > 0 ? 18 : 0) - (G.wars.length ? 6 : 0) + (G.mode === 'gerilya' && G.wars.length ? -4 : 0);
-    R.stab = clamp(R.stab + (target - R.stab) * 0.2 + rint(-3, 3), 0, 100);
-    if (R.pros > 50) R.pros -= 1 + (R.pros - 50) * 0.03;
-    if (G.mode === 'gerilya' && G.wars.length) R.pros = Math.max(5, R.pros - 3);
+    R.stab = clamp(R.stab + (target - R.stab) * 0.02 + (rand() - 0.5) * 2, 0, 100);
+    if (R.pros > 50) R.pros -= (1 + (R.pros - 50) * 0.03) * M;
+    if (G.mode === 'gerilya' && G.wars.length) R.pros = Math.max(5, R.pros - 0.25);
     if (R.occ > 0) R.occ--;
   }
-  for (const rid of Object.keys(G.reg)) if (G.reg[rid].owner !== G.player) G.reg[rid].pop *= 1.007;
-  // legitimasi
+  for (const rid of Object.keys(G.reg)) if (G.reg[rid].owner !== G.player) G.reg[rid].pop *= 1 + 0.007 * M;
   let dl = (50 - (f.legit ?? 60)) * 0.08;
   for (const t of (r0 ? r0.tr : [])) dl += TRAITS[t].legit || 0;
   if (D(G.player).bonus.id === 'serambi' || D(G.player).bonus.id === 'keraton') dl += 1;
   if (isRegency()) dl -= 2;
-  addLegit(dl);
-  if (f.overlord) addIndep(-1.5 + ((f.legit ?? 60) - 50) / 40 + f.army / 4000);
+  addLegit(dl * M);
+  if (f.overlord) addIndep((-1.5 + ((f.legit ?? 60) - 50) / 40 + f.army / 4000) * M);
 
-  // tokoh
-  processCharacters(report);
-  if (G.over) { G.year++; return report; }
+  monthlyCharacters();
+  if (G.over) return;
 
-  // AI kerajaan lain
   for (const [id, F] of Object.entries(G.fac)) {
     if (id === G.player || D(id).kind !== 'kerajaan' || !alive(id)) continue;
     const pop = regionsOf(id).reduce((s, r) => s + G.reg[r].pop, 0);
-    F.army = Math.round(F.army + (pop * 5 - F.army) * 0.1);
-    if (chance(0.04)) F.rulerName = aiRulerName(id);
+    F.army = Math.round(F.army + (pop * 5 - F.army) * 0.009);
+    if (chance(0.04 / 12)) F.rulerName = aiRulerName(id);
   }
-  for (const id of Object.keys(G.rel)) { if (id === 'belanda') continue; G.rel[id] += (10 - G.rel[id]) * 0.03; }
+  for (const id of Object.keys(G.rel)) { if (id === 'belanda') continue; G.rel[id] += (10 - G.rel[id]) * 0.0025; }
   for (const a of G.allies.slice()) if (!alive(a)) G.allies = G.allies.filter(x => x !== a);
 
-  processWars(report);
-  if (G.over) { G.year++; return report; }
+  processWars();
+  if (G.over) return;
+  processBelanda();
 
-  G.year++;
-  // harga komoditas
-  G.price.rempah = Math.max(0.6, G.price.rempah - 0.004);
-  historyNews(report);
-  processBelanda(report);
-  queueHistory();
-  // pemberontakan dan bangsawan
   const unstable = myRegions().filter(r => G.reg[r].stab < 20);
-  if (unstable.length && chance(0.4)) G.queue.push({ ev: 'pemberontakan', ctx: { rid: pick(unstable) } });
+  if (unstable.length && chance(0.04)) G.queue.push({ ev: 'pemberontakan', ctx: { rid: pick(unstable) } });
   const disloyal = nobles().filter(c => c.loy < 15);
-  if (disloyal.length && chance(0.35)) G.queue.push({ ev: 'membelot', ctx: { cid: disloyal[0].id } });
-  // peristiwa acak
-  if (chance(0.7)) { const e = pickRandomEvent(); if (e) G.queue.push(e); }
-  if (G.year >= 1908) addNat(myRegions().reduce((s, r) => s + G.reg[r].school, 0) * 0.35 + 0.3);
-  resetTitah();
-  checkBadges();
-  if (G.year >= END_YEAR && !G.over && !G.queue.some(q => q.ev === 'proklamasi')) G.queue.push({ ev: 'proklamasi', ctx: {} });
-  return report;
+  if (disloyal.length && chance(0.03)) G.queue.push({ ev: 'membelot', ctx: { cid: disloyal[0].id } });
+  if (chance(0.065)) { const e = pickRandomEvent(); if (e) G.queue.push(e); }
+  if (G.year >= 1908) addNat((myRegions().reduce((s, r) => s + G.reg[r].school, 0) * 0.35 + 0.3) * M);
 }
 
-function processCharacters(report){
+function newYear(prevYear){
   const f = P();
-  // pendidikan dan dewasa
+  log(`Tahun ${prevYear} ditutup. Kas kerajaan ${fmt(f.kas)} gulden, ${myRegions().length} wilayah, ${fmt(f.army)} prajurit.`, 'penting');
+  if (G.flags.loanYears > 0) G.flags.loanYears--;
+  G.price.rempah = Math.max(0.6, G.price.rempah - 0.004);
+  yearlyCharacters();
+  if (typeof saveNow === 'function') saveNow();
+}
+
+function dateTriggers(cur){
+  const now = dateKey(cur.y, cur.m + 1, cur.d);
+  NEWS.forEach((n, i) => { if (!G.flags['n' + i] && now >= dateKey(n.y, n.m, n.d)) { G.flags['n' + i] = 1; n.fn(); } });
+  EXPED.forEach((e, i) => {
+    if (G.flags['x' + i] || now < dateKey(e.y, e.m)) return;
+    G.flags['x' + i] = 1;
+    if (e.r) { if (G.reg[e.r].owner === 'adat') { setOwner(e.r, 'belanda'); log(`Belanda menaklukkan ${RD(e.r).name}.`, 'kabar'); } return; }
+    if (e.t === G.player) { if (!isVassal() && !atWarWith('belanda') && !G.japan) G.queue.push({ ev: 'ultimatum', ctx: { hist: true } }); return; }
+    if (!G.japan) resolveAIExpedition(e.t, e.v);
+  });
+  for (const h of HISTORY) if (!G.flags['h_' + h.ev] && now >= dateKey(h.y, h.m, h.d) && (!h.cond || h.cond())) { G.flags['h_' + h.ev] = 1; G.queue.push({ ev: h.ev, ctx: {} }); }
+}
+
+function monthlyCharacters(){
+  const f = P(), M = 1 / 12, report = [];
+  let rulerDied = false;
+  for (const c of court()) {
+    if (!chance(deathChance(c) * M)) continue;
+    c.alive = false;
+    if (c.id === f.ruler) { rulerDied = true; report.push(`${charName(c)} wafat pada usia ${age(c)} tahun.`); log(`${charName(c)} wafat.`, 'buruk'); }
+    else if (c.dyn || c.sp === f.ruler) { log(`${charName(c)} meninggal dunia pada usia ${age(c)} tahun.`, 'info'); toast(`${charName(c)} meninggal dunia.`); }
+    else if (c.noble) log(`${charName(c)} meninggal dunia.`, 'info');
+    for (const s of Object.keys(f.council)) if (f.council[s] === c.id) f.council[s] = null;
+  }
+  if (rulerDied) { succession(report); if (!G.over) notice('Pergantian takhta', report.join(' ')); }
+  if (G.over) return;
+  const r = rulerC(), sp = CH(r?.sp);
+  if (r && sp && sp.alive) {
+    const mother = r.g === 'P' ? r : sp;
+    if (age(mother) >= 16 && age(mother) <= 42 && chance(0.26 * M)) {
+      const k = newChar({ fac: G.player, cul: D(G.player).culture, age: 0, dyn: true, par: r.id });
+      log(`Lahir ${k.n}, ${k.g === 'L' ? 'putra' : 'putri'} ${charName(r)}.`, 'baik');
+      toast(`Kabar gembira: lahir ${k.g === 'L' ? 'seorang putra' : 'seorang putri'}, ${k.n}.`, true);
+      if (!heirC() || (k.g === 'L' && heirC().g === 'P' && heirC().par === r.id)) f.heir = defaultHeir();
+    }
+  }
+  for (const c of nobles()) {
+    const seat = Object.values(f.council).includes(c.id);
+    const t = 45 + (f.legit ?? 60) * 0.25 + TAX[f.tax].loy + (seat ? 10 : 0) - (hasTrait(r, 'serakah') ? 10 : 0) - (G.rel.belanda < 0 ? 6 : 0);
+    c.loy = clamp(c.loy + (t - c.loy) * 0.025 + (rand() - 0.55) * 2.5, 0, 100);
+  }
+  autoCouncilFill();
+  if (!heirC()) f.heir = defaultHeir();
+}
+
+function yearlyCharacters(){
   for (const c of family()) {
-    if (age(c) === 16 && !c.eduDone) {
+    if (age(c) >= 16 && !c.eduDone) {
       c.eduDone = true;
       const map = { agama: ['saleh','adm'], militer: ['cakap_perang','mil'], praja: ['cermat','adm'], eropa: ['pembaharu','dip'] };
       if (c.edu && map[c.edu]) {
@@ -614,42 +672,12 @@ function processCharacters(report){
         if (c.edu === 'eropa') addRel('belanda', 6);
       }
       if (!c.tr.length) c.tr.push(chance(0.6) ? pick(GOOD_TRAITS) : pick(BAD_TRAITS));
-      report.push(`${charName(c)} telah dewasa.`);
+      log(`${charName(c)} telah dewasa.`, 'info');
     }
-  }
-  // kematian
-  let rulerDied = false;
-  for (const c of court()) {
-    if (!chance(deathChance(c))) continue;
-    c.alive = false;
-    if (c.id === f.ruler) { rulerDied = true; report.push(`Duka cita: ${charName(c)} wafat pada usia ${age(c)} tahun.`); log(`${charName(c)} wafat.`, 'buruk'); }
-    else if (c.dyn || c.sp === f.ruler) { report.push(`${charName(c)} meninggal dunia pada usia ${age(c)} tahun.`); log(`${charName(c)} meninggal dunia.`, 'info'); }
-    else if (c.noble) log(`${charName(c)} meninggal dunia.`, 'info');
-    for (const s of Object.keys(f.council)) if (f.council[s] === c.id) f.council[s] = null;
-  }
-  if (rulerDied) succession(report);
-  if (G.over) return;
-  // kelahiran
-  const r = rulerC(), sp = CH(r?.sp);
-  if (r && sp && sp.alive) {
-    const mother = r.g === 'P' ? r : sp;
-    if (age(mother) >= 16 && age(mother) <= 42 && chance(0.26)) {
-      const k = newChar({ fac: G.player, cul: D(G.player).culture, age: 0, dyn: true, par: r.id });
-      report.push(`Kabar gembira: lahir ${k.g === 'L' ? 'seorang putra' : 'seorang putri'}, ${k.n}.`);
-      log(`Lahir ${k.n}, anak ${charName(r)}.`, 'baik');
-      if (!heirC() || (k.g === 'L' && heirC().g === 'P' && heirC().par === r.id)) f.heir = defaultHeir();
-    }
-  }
-  // kesetiaan bangsawan
-  for (const c of nobles()) {
-    const seat = Object.values(f.council).includes(c.id);
-    let t = 45 + (f.legit ?? 60) * 0.25 + TAX[f.tax].loy + (seat ? 10 : 0) - (hasTrait(r, 'serakah') ? 10 : 0) - (G.rel.belanda < 0 ? 6 : 0);
-    c.loy = clamp(c.loy + (t - c.loy) * 0.25 + rint(-5, 4), 0, 100);
   }
   if (nobles().length < 5 && chance(0.4)) { const c = newChar({ fac: G.player, cul: D(G.player).culture, age: rint(18, 30), noble: true, adultTraits: true }); log(`${charName(c)} bergabung dengan istana.`, 'info'); }
-  autoCouncilFill();
-  if (!heirC()) f.heir = defaultHeir();
 }
+
 function autoCouncilFill(){ const f = P(); for (const s of Object.keys(f.council)) { const c = CH(f.council[s]); if (!c || !c.alive || c.out) f.council[s] = null; } }
 
 /* ---------- lencana ---------- */
@@ -699,9 +727,11 @@ const isMuslimKingdom = () => ['aceh','bone','banjar','siak','ternate','gowa','y
 
 const EVENTS = {
   sambutan: { hist: true,
-    title: () => `Tahun ${G.year}: ${D(G.player).short} menanti titahmu`,
-    text: () => `${charName(rulerC())} kini memegang takhta ${D(G.player).name}. Hindia Belanda baru saja memenangkan Perang Jawa dan bersiap menancapkan kuasanya di seluruh Nusantara. Tujuanmu: bertahan hingga 1945, menjaga wangsa tetap berkuasa, dan meninggalkan warisan yang dikenang.<br><br>Setiap tahun kamu mendapat beberapa <b>titah</b>. Gunakan titah untuk membangun wilayah, mengatur pasukan, dan berdiplomasi. Klik wilayah di peta untuk melihat pilihannya, lalu tekan <b>Akhiri tahun</b>.${isVassal() ? '<br><br>Kerajaanmu berstatus <b>bawahan Belanda</b>. Kamu wajib membayar upeti. Naikkan <b>kemandirian</b> bila suatu saat ingin lepas.' : ''}`,
+    title: () => `${dateStr()}: ${D(G.player).short} menanti titahmu`,
+    text: () => `${charName(rulerC())} kini memegang takhta ${D(G.player).name}. Hindia Belanda baru saja memenangkan Perang Jawa dan bersiap menancapkan kuasanya di seluruh Nusantara. Tujuanmu: bertahan hingga 17 Agustus 1945, menjaga wangsa tetap berkuasa, dan meninggalkan warisan yang dikenang.<br><br><b>Waktu berjalan sendiri</b>, satu minggu demi satu minggu. Tekan tombol <b>Jalan</b> atau spasi untuk memulai, dan atur kecepatannya kapan saja. Permainan berhenti sendiri ketika ada peristiwa penting.<br><br>Setiap tindakan memakai <b>wibawa</b> yang terkumpul perlahan setiap bulan. Pembangunan butuh waktu berbulan-bulan dan biayanya dicicil setiap minggu.${isVassal() ? '<br><br>Kerajaanmu berstatus <b>bawahan Belanda</b>. Kamu wajib membayar upeti. Naikkan <b>kemandirian</b> bila suatu saat ingin lepas.' : ''}`,
     opts: [{ t: 'Mulai memerintah', fx: () => '' }] },
+
+  kabar: { title: c => c.title, text: c => esc(c.text), opts: [{ t: 'Lanjutkan', fx: () => '' }] },
 
   tanampaksa: { hist: true,
     title: () => 'Tanam Paksa diberlakukan',
@@ -898,12 +928,13 @@ const EVENTS = {
 };
 
 /* peristiwa sejarah yang muncul pada tahun tertentu */
+/* peristiwa sejarah dengan tanggal (bulan 1 sampai 12) */
 const HISTORY = [
-  { y: 1830, ev: 'sambutan' },
-  { y: 1831, ev: 'tanampaksa', cond: () => ['yogya','surakarta'].includes(G.player) },
-  { y: 1860, ev: 'maxhavelaar' }, { y: 1870, ev: 'agraria' }, { y: 1871, ev: 'traktat', cond: () => G.player === 'aceh' && !isVassal() },
-  { y: 1883, ev: 'krakatau' }, { y: 1901, ev: 'etis' }, { y: 1908, ev: 'budiutomo' }, { y: 1912, ev: 'sarekat' },
-  { y: 1918, ev: 'volksraad' }, { y: 1928, ev: 'sumpahpemuda' }, { y: 1930, ev: 'malaise' }, { y: 1942, ev: 'jepang' }, { y: 1943, ev: 'romusha' }
+  { y: 1831, m: 3, ev: 'tanampaksa', cond: () => ['yogya','surakarta'].includes(G.player) },
+  { y: 1860, m: 5, ev: 'maxhavelaar' }, { y: 1870, m: 4, d: 9, ev: 'agraria' }, { y: 1871, m: 11, d: 2, ev: 'traktat', cond: () => G.player === 'aceh' && !isVassal() },
+  { y: 1883, m: 8, d: 27, ev: 'krakatau' }, { y: 1901, m: 9, d: 17, ev: 'etis' }, { y: 1908, m: 5, d: 20, ev: 'budiutomo' }, { y: 1912, m: 9, d: 10, ev: 'sarekat' },
+  { y: 1918, m: 5, d: 18, ev: 'volksraad' }, { y: 1928, m: 10, d: 28, ev: 'sumpahpemuda' }, { y: 1930, m: 1, ev: 'malaise' }, { y: 1942, m: 3, d: 8, ev: 'jepang' }, { y: 1943, m: 6, ev: 'romusha' },
+  { y: 1945, m: 8, d: 17, ev: 'proklamasi' }
 ];
 Object.assign(EVENTS, {
   maxhavelaar: { hist: true, title: () => 'Max Havelaar menggemparkan Belanda',
@@ -984,35 +1015,31 @@ Object.assign(EVENTS, {
     ] }
 });
 
-function historyNews(report){
-  const y = G.year;
-  const news = t => { report.push(t); log(t, 'kabar'); };
-  if (y === 1837 && G.reg.minang.owner === 'belanda') news('Perang Padri berakhir. Tuanku Imam Bonjol ditangkap Belanda.');
-  if (y === 1841 && G.reg.sarawak.owner === 'brunei') { setOwner('sarawak', 'inggris'); news('James Brooke diangkat menjadi Raja Sarawak. Inggris mulai bercokol di Kalimantan Utara.'); }
-  if (y === 1859 && G.reg.larantuka.owner === 'portugis') { setOwner('larantuka', 'belanda'); news('Portugis menyerahkan Flores Timur kepada Belanda.'); }
-  if (y === 1863) { G.price.tembakau = 1.5; news('Tembakau Deli mulai terkenal di pasar Eropa. Harga tembakau naik.'); }
-  if (y === 1869) { G.priceAll *= 1.1; G.fac.belanda.army += 1500; news('Terusan Suez dibuka. Kapal uap mempercepat perdagangan dan pengiriman pasukan dari Eropa.'); }
-  if (y === 1878) { G.price.kopi *= 0.7; news('Penyakit karat daun merusak kebun kopi. Harga kopi jatuh.'); }
-  if (y === 1881 && G.reg.sabah.owner === 'brunei') { setOwner('sabah', 'inggris'); news('Kompani Borneo Utara milik Inggris menguasai Sabah.'); }
-  if (y === 1883) for (const r of ['banten','batavia','lampung']) { G.reg[r].pros = Math.max(5, G.reg[r].pros - 25); G.reg[r].pop *= 0.94; }
-  if (y === 1884) { G.price.gula *= 0.75; news('Krisis gula melanda. Harga gula turun tajam.'); }
-  if (y === 1885) { for (const r of ['deli','kutai','palembang']) G.reg[r].pros = Math.min(100, G.reg[r].pros + 15); news('Minyak bumi ditemukan di Telaga Said, Langkat. Deli, Kutai, dan Palembang ikut makmur.'); }
-  if (y === 1898) news('Van Heutsz memperkenalkan perjanjian pendek. Semua kerajaan diminta tunduk pada Belanda.');
-  if (y === 1905) { G.price.hutan = 1.5; news('Perkebunan karet menyebar. Hasil hutan semakin berharga.'); }
-  if (y === 1930) { G.priceAll *= 0.65; }
-  if (y === 1936) { G.priceAll *= 1.35; news('Ekonomi dunia mulai pulih dari zaman Malaise.'); }
-  if (y === 1942) {
+const NEWS = [
+  { y: 1837, m: 8, fn: () => { if (G.reg.minang.owner === 'belanda') news('Perang Padri berakhir. Tuanku Imam Bonjol ditangkap Belanda.'); } },
+  { y: 1841, m: 9, fn: () => { if (G.reg.sarawak.owner === 'brunei') { setOwner('sarawak', 'inggris'); news('James Brooke diangkat menjadi Raja Sarawak. Inggris mulai bercokol di Kalimantan Utara.'); } } },
+  { y: 1859, m: 4, fn: () => { if (G.reg.larantuka.owner === 'portugis') { setOwner('larantuka', 'belanda'); news('Portugis menyerahkan Flores Timur kepada Belanda.'); } } },
+  { y: 1863, m: 6, fn: () => { G.price.tembakau = 1.5; news('Tembakau Deli mulai terkenal di pasar Eropa. Harga tembakau naik.'); } },
+  { y: 1869, m: 11, d: 17, fn: () => { G.priceAll *= 1.1; G.fac.belanda.army += 1500; news('Terusan Suez dibuka. Kapal uap mempercepat perdagangan dan pengiriman pasukan dari Eropa.'); } },
+  { y: 1878, m: 3, fn: () => { G.price.kopi *= 0.7; news('Penyakit karat daun merusak kebun kopi. Harga kopi jatuh.'); } },
+  { y: 1881, m: 11, fn: () => { if (G.reg.sabah.owner === 'brunei') { setOwner('sabah', 'inggris'); news('Kompani Borneo Utara milik Inggris menguasai Sabah.'); } } },
+  { y: 1883, m: 8, d: 27, fn: () => { for (const r of ['banten','batavia','lampung']) { G.reg[r].pros = Math.max(5, G.reg[r].pros - 25); G.reg[r].pop *= 0.94; } } },
+  { y: 1884, m: 2, fn: () => { G.price.gula *= 0.75; news('Krisis gula melanda. Harga gula turun tajam.'); } },
+  { y: 1885, m: 6, fn: () => { for (const r of ['deli','kutai','palembang']) G.reg[r].pros = Math.min(100, G.reg[r].pros + 15); news('Minyak bumi ditemukan di Telaga Said, Langkat. Deli, Kutai, dan Palembang ikut makmur.'); } },
+  { y: 1898, m: 6, fn: () => news('Van Heutsz memperkenalkan perjanjian pendek. Semua kerajaan diminta tunduk pada Belanda.') },
+  { y: 1905, m: 1, fn: () => { G.price.hutan = 1.5; news('Perkebunan karet menyebar. Hasil hutan semakin berharga.'); } },
+  { y: 1930, m: 1, fn: () => { G.priceAll *= 0.65; } },
+  { y: 1936, m: 1, fn: () => { G.priceAll *= 1.35; news('Ekonomi dunia mulai pulih dari zaman Malaise.'); } },
+  { y: 1942, m: 3, d: 8, fn: () => {
     G.japan = true;
     for (const r of Object.keys(G.reg)) if (G.reg[r].owner === 'belanda') G.reg[r].owner = 'jepang';
     for (const f of Object.values(G.fac)) if (f.overlord === 'belanda') f.overlord = 'jepang';
     G.wars = G.wars.filter(w => w.enemy !== 'belanda');
-    G.rel.jepang = 0;
+    G.rel.jepang = 0; G.ownVer = (G.ownVer || 0) + 1;
     news('Hindia Belanda menyerah kepada Jepang di Kalijati.');
-  }
-}
-function queueHistory(){
-  for (const h of HISTORY) if (h.y === G.year && !G.flags['h_' + h.ev] && (!h.cond || h.cond())) { G.flags['h_' + h.ev] = 1; G.queue.push({ ev: h.ev, ctx: {} }); }
-}
+  } }
+];
+function news(t){ log(t, 'kabar'); toast(t); }
 function pickRandomEvent(){
   const pool = [];
   for (const [id, e] of Object.entries(EVENTS)) {
@@ -1039,25 +1066,89 @@ const COST = {
   gift: () => C(60), marry: () => C(40), marryRuler: () => C(50), prestige: () => C(100)
 };
 
+/* ---------- proyek yang butuh waktu ---------- */
+function trainCap(){ const pg = councilOf('panglima'); return 1.1 + (pg && stat(pg, 'mil') >= 7 ? 0.1 : 0) + (hasTrait(rulerC(), 'pembaharu') ? 0.05 : 0); }
+const PROJ = {
+  develop: { n: 'Pembangunan pasar dan irigasi', w: () => 26, wib: 8, cost: rid => COST.develop(rid),
+    ok: rid => G.reg[rid].pros < 95 || 'Kemakmuran sudah maksimal.',
+    fin: rid => { G.reg[rid].pros = Math.min(100, G.reg[rid].pros + 9); return `Pasar dan irigasi di ${RD(rid).name} selesai. Kemakmuran naik.`; } },
+  fort: { n: 'Pembangunan benteng', w: rid => 26 + 13 * G.reg[rid].fort, wib: 10, cost: rid => COST.fort(rid),
+    ok: rid => G.reg[rid].fort < 3 || 'Benteng sudah paling kuat.',
+    fin: rid => { const R = G.reg[rid]; R.fort = Math.min(3, R.fort + 1); addRel('belanda', -2); return `Benteng ${RD(rid).name} selesai dibangun. Kini tingkat ${R.fort}.`; } },
+  school: { n: 'Pembangunan sekolah', w: () => 52, wib: 8, cost: () => COST.school(),
+    ok: rid => G.reg[rid].school < 2 || 'Sekolah di wilayah ini sudah lengkap.',
+    fin: rid => { const R = G.reg[rid]; R.school++; R.stab = Math.min(100, R.stab + 5); if (G.year >= 1901) addNat(2); return `Sekolah di ${RD(rid).name} dibuka.`; } },
+  recruit: { n: 'Perekrutan 500 prajurit', w: () => 13, wib: 4, cost: () => COST.recruit(),
+    ok: () => P().army + 500 * (1 + G.proj.filter(p => p.k === 'recruit').length) <= manpower() || 'Tenaga manusia sudah habis. Perluas wilayah atau tingkatkan penduduk.',
+    fin: rid => { P().army += 500; const R = G.reg[rid]; R.stab = Math.max(0, R.stab - 4); R.pop = Math.max(5, R.pop - 0.5); return `500 prajurit baru dari ${RD(rid).name} siap bertugas.`; } },
+  embrace: { n: 'Utusan kepada pemuka adat', w: () => 9, wib: 8, cost: rid => COST.embrace(rid), foreign: true,
+    ok: rid => (G.reg[rid].owner === 'adat' && inReach(rid)) || 'Wilayah ini tidak bisa dirangkul.',
+    fin: rid => {
+      const R = G.reg[rid]; if (R.owner !== 'adat') return `Utusan ke ${RD(rid).name} pulang karena wilayah itu sudah dikuasai pihak lain.`;
+      const duta = councilOf('duta');
+      const p = clamp(0.3 + stat(duta, 'dip') * 0.035 + (P().legit ?? 60) / 400 + (D(G.player).bonus.id === 'diplomasi' ? 0.1 : 0), 0.15, 0.9);
+      if (chance(p)) { setOwner(rid, G.player); R.stab = 45; addRel('belanda', -3); checkBadges(); return `Para pemuka ${RD(rid).name} bersedia bergabung dengan kerajaan.`; }
+      return `Para pemuka ${RD(rid).name} menolak bergabung. Hadiah sudah terlanjur diberikan.`;
+    } },
+  train: { n: 'Latihan pasukan', army: true, w: () => 13, wib: 6, cost: () => COST.train(),
+    ok: () => P().quality < trainCap() || 'Latihan tidak lagi menambah mutu. Coba beli senapan.',
+    fin: () => { P().quality = Math.min(trainCap(), P().quality + 0.05); return 'Latihan pasukan selesai. Mutu pasukan naik.'; } },
+  rifles: { n: 'Pengiriman senapan', army: true, w: () => 17, wib: 8, cost: () => COST.rifles(),
+    ok: () => !myRegions().some(coastal) ? 'Kerajaan tidak punya pelabuhan untuk menerima senapan.' : P().quality >= 1.6 ? 'Mutu pasukan sudah setara pasukan modern.' : true,
+    fin: () => { P().quality = Math.min(1.6, P().quality + 0.12); addRel('belanda', -8); return 'Senapan selundupan dari Penang dan Singapura tiba.'; } }
+};
+const projOf = rid => G.proj.find(p => p.rid === rid);
+const armyProj = () => G.proj.find(p => PROJ[p.k].army);
+function startProject(k, rid){
+  const def = PROJ[k];
+  if (def.army ? armyProj() : projOf(rid)) return toast(def.army ? 'Angkatan perang sedang menjalankan program lain.' : 'Wilayah ini sedang mengerjakan proyek lain.');
+  const ok = def.ok(rid); if (ok !== true) return toast(ok);
+  const weeks = def.w(rid);
+  if (!spend(0, def.wib)) return;
+  G.proj.push({ k, rid: rid || null, weeks, done: 0, cost: def.cost(rid), paid: 0, stall: false });
+  done(`${def.n} dimulai. Perkiraan selesai ${durStr(weeks)} lagi.`);
+}
+function cancelProject(i){
+  const p = G.proj[i]; if (!p) return;
+  G.proj.splice(i, 1);
+  done(`${PROJ[p.k].n} dibatalkan. Biaya yang sudah keluar tidak kembali.`);
+}
+function weeklyProjects(){
+  for (const p of G.proj.slice()) {
+    const def = PROJ[p.k];
+    if (p.rid && !def.foreign && G.reg[p.rid].owner !== G.player) { G.proj.splice(G.proj.indexOf(p), 1); log(`${def.n} di ${RD(p.rid).name} terhenti karena wilayah itu jatuh.`, 'buruk'); continue; }
+    const pay = p.cost / p.weeks;
+    if (P().kas < pay) { p.stall = true; continue; }
+    P().kas -= pay; p.paid += pay; p.done++; p.stall = false;
+    if (p.done >= p.weeks) {
+      G.proj.splice(G.proj.indexOf(p), 1);
+      const msg = def.fin(p.rid);
+      log(msg, 'baik'); toast(msg, true);
+    }
+  }
+}
+
 /* ---------- tindakan pemain ---------- */
+const WIBAWA = { relief: 5, gift: 5, ally: 8, war: 10, peace: 5, marry: 8, marryRuler: 8, prestige: 10, independence: 15, attack: 6 };
 const ACT = {
-  develop(rid){ const R = G.reg[rid]; const cost = COST.develop(rid); if (R.pros >= 95) return toast('Kemakmuran sudah maksimal.'); if (!spend(cost)) return; R.pros = Math.min(100, R.pros + 9); log(`Pasar dan saluran irigasi dibangun di ${RD(rid).name}.`, 'info'); done(`Kemakmuran ${RD(rid).name} naik.`); },
-  fort(rid){ const R = G.reg[rid]; if (R.fort >= 3) return toast('Benteng sudah paling kuat.'); const cost = COST.fort(rid); if (!spend(cost)) return; R.fort++; addRel('belanda', -2); log(`Benteng di ${RD(rid).name} diperkuat.`, 'info'); done(`Benteng ${RD(rid).name} kini tingkat ${R.fort}.`); },
-  school(rid){ const R = G.reg[rid]; if (R.school >= 2) return toast('Sekolah di wilayah ini sudah lengkap.'); if (!spend(COST.school())) return; R.school++; R.stab = Math.min(100, R.stab + 5); if (G.year >= 1901) addNat(2); log(`Sekolah didirikan di ${RD(rid).name}.`, 'info'); checkBadges(); done(`Sekolah di ${RD(rid).name} dibuka.`); },
-  recruit(rid){ const f = P(); if (f.army + 500 > manpower()) return toast('Tenaga manusia sudah habis. Perluas wilayah atau tingkatkan penduduk.'); if (!spend(COST.recruit())) return; f.army += 500; const R = G.reg[rid]; R.stab = Math.max(0, R.stab - 4); R.pop = Math.max(5, R.pop - 0.5); done(`500 prajurit baru direkrut dari ${RD(rid).name}.`); },
-  relief(rid){ const R = G.reg[rid]; if (!spend(COST.relief(rid))) return; R.stab = Math.min(100, R.stab + 15); addLegit(1); done(`Beras dibagikan di ${RD(rid).name}.`); },
-  embrace(rid){ const R = G.reg[rid]; if (!spend(COST.embrace(rid))) return; const duta = councilOf('duta'); const p = clamp(0.3 + stat(duta, 'dip') * 0.035 + (P().legit ?? 60) / 400 + (D(G.player).bonus.id === 'diplomasi' ? 0.1 : 0), 0.15, 0.9); if (chance(p)) { setOwner(rid, G.player); R.stab = 45; addRel('belanda', -3); log(`Para pemuka ${RD(rid).name} bersedia bergabung dengan kerajaan.`, 'baik'); checkBadges(); done(`${RD(rid).name} bergabung secara damai.`); } else { done(`Para pemuka ${RD(rid).name} menolak bergabung. Hadiah sudah terlanjur diberikan.`); } },
-  train(){ const f = P(); const pg = councilOf('panglima'); const cap = 1.1 + (pg && stat(pg, 'mil') >= 7 ? 0.1 : 0) + (hasTrait(rulerC(), 'pembaharu') ? 0.05 : 0); if (f.quality >= cap) return toast('Latihan tidak lagi menambah mutu. Coba beli senapan.'); if (!spend(COST.train())) return; f.quality = Math.min(cap, f.quality + 0.05); done('Pasukan berlatih sepanjang musim kemarau.'); },
-  rifles(){ const f = P(); if (!myRegions().some(coastal)) return toast('Kerajaan tidak punya pelabuhan untuk menerima senapan.'); if (f.quality >= 1.6) return toast('Mutu pasukan sudah setara pasukan modern.'); if (!spend(COST.rifles())) return; f.quality = Math.min(1.6, f.quality + 0.12); addRel('belanda', -8); done('Senapan selundupan dari Penang dan Singapura tiba.'); },
+  develop(rid){ startProject('develop', rid); },
+  fort(rid){ startProject('fort', rid); },
+  school(rid){ startProject('school', rid); },
+  recruit(rid){ startProject('recruit', rid); },
+  embrace(rid){ startProject('embrace', rid); },
+  train(){ startProject('train'); },
+  rifles(){ startProject('rifles'); },
+  cancel(i){ cancelProject(+i); },
+  relief(rid){ const R = G.reg[rid]; if (!spend(COST.relief(rid), WIBAWA.relief)) return; R.stab = Math.min(100, R.stab + 15); addLegit(1); done(`Beras dibagikan di ${RD(rid).name}.`); },
   disband(){ const f = P(); if (f.army < 500) return toast('Pasukan terlalu sedikit.'); f.army -= 500; done('500 prajurit dibebaskan pulang ke desa.'); },
-  gift(fid){ if (!spend(COST.gift())) return; const duta = councilOf('duta'); addRel(fid, 10 + Math.max(0, stat(duta, 'dip') - 5) + (D(G.player).bonus.id === 'diplomasi' ? 4 : 0)); done(`Hadiah dikirim ke ${D(fid).short}.`); },
-  ally(fid){ if (G.rel[fid] < 40) return toast('Hubungan belum cukup baik. Butuh minimal 40.'); if (!spend(0)) return; const duta = councilOf('duta'); const p = clamp((G.rel[fid] - 25) / 60 + stat(duta, 'dip') * 0.02, 0.1, 0.9); if (chance(p)) { G.allies.push(fid); addRel(fid, 10); log(`Persekutuan dengan ${D(fid).name} disepakati.`, 'baik'); done(`${D(fid).short} kini sekutu kita.`); } else { addRel(fid, -5); done(`${D(fid).short} belum bersedia bersekutu.`); } },
-  war(fid){ if (isVassal()) return toast('Kerajaan bawahan tidak boleh berperang tanpa izin Belanda.'); if (G.fac[fid].overlord) return toast(`${D(fid).short} berada di bawah perlindungan ${facName(G.fac[fid].overlord)}.`); if (!spend(0)) return; if (G.allies.includes(fid)) addLegit(-12); startWar(fid); addRel('belanda', -6); done(`Perang dinyatakan terhadap ${D(fid).short}.`); },
-  peace(fid){ if (!spend(0)) return; const w = warWith(fid); if (!w) return;
+  gift(fid){ if (!spend(COST.gift(), WIBAWA.gift)) return; const duta = councilOf('duta'); addRel(fid, 10 + Math.max(0, stat(duta, 'dip') - 5) + (D(G.player).bonus.id === 'diplomasi' ? 4 : 0)); done(`Hadiah dikirim ke ${D(fid).short}.`); },
+  ally(fid){ if (G.rel[fid] < 40) return toast('Hubungan belum cukup baik. Butuh minimal 40.'); if (!spend(0, WIBAWA.ally)) return; const duta = councilOf('duta'); const p = clamp((G.rel[fid] - 25) / 60 + stat(duta, 'dip') * 0.02, 0.1, 0.9); if (chance(p)) { G.allies.push(fid); addRel(fid, 10); log(`Persekutuan dengan ${D(fid).name} disepakati.`, 'baik'); done(`${D(fid).short} kini sekutu kita.`); } else { addRel(fid, -5); done(`${D(fid).short} belum bersedia bersekutu.`); } },
+  war(fid){ if (isVassal()) return toast('Kerajaan bawahan tidak boleh berperang tanpa izin Belanda.'); if (G.fac[fid].overlord) return toast(`${D(fid).short} berada di bawah perlindungan ${facName(G.fac[fid].overlord)}.`); if (!spend(0, WIBAWA.war)) return; if (G.allies.includes(fid)) addLegit(-12); startWar(fid); addRel('belanda', -6); done(`Perang dinyatakan terhadap ${D(fid).short}.`); },
+  peace(fid){ const w = warWith(fid); if (!w) return; if (!spend(0, WIBAWA.peace)) return;
     if (fid === 'belanda') { if (w.exh >= 50 && chance(w.exh / 130)) { G.queue.push({ ev: 'damaibelanda', ctx: {} }); renderAll(); runQueue(); return; } return done('Belanda menolak berunding. Mereka menuntut penyerahan.'); }
     const p = clamp(0.25 + w.wins * 0.15 + w.exh / 150 - w.losses * 0.1, 0.05, 0.9);
     if (chance(p)) { endWar(fid); done(`${D(fid).short} menerima perdamaian.`); } else done(`${D(fid).short} menolak berdamai.`); },
-  marry(fid, cid){ const c = CH(cid); if (!c) return; if (!spend(COST.marry())) return; const duta = councilOf('duta'); const p = clamp(0.4 + G.rel[fid] / 200 + stat(duta, 'dip') * 0.02, 0.15, 0.95);
+  marry(fid, cid){ const c = CH(cid); if (!c) return; if (!spend(COST.marry(), WIBAWA.marry)) return; const duta = councilOf('duta'); const p = clamp(0.4 + G.rel[fid] / 200 + stat(duta, 'dip') * 0.02, 0.15, 0.95);
     if (!chance(p)) { done(`Pinangan ke ${D(fid).short} ditolak dengan halus.`); return; }
     const cul = D(fid).culture || 'melayu';
     const sp = newChar({ fac: c.g === 'L' ? G.player : fid, cul, g: c.g === 'L' ? 'P' : 'L', age: age(c) - rint(-2, 4), adultTraits: true });
@@ -1066,14 +1157,14 @@ const ACT = {
     addRel(fid, 25); G.stats.marriages++; checkBadges();
     log(`${charName(c)} menikah dengan keluarga istana ${D(fid).short}.`, 'baik');
     done(`Pernikahan disepakati. Hubungan dengan ${D(fid).short} menguat.`); },
-  marryRuler(kind, fid){ const r = rulerC(); if (!spend(COST.marryRuler())) return; const cul = kind === 'asing' ? D(fid).culture : D(G.player).culture;
+  marryRuler(kind, fid){ const r = rulerC(); if (!spend(COST.marryRuler(), WIBAWA.marryRuler)) return; const cul = kind === 'asing' ? D(fid).culture : D(G.player).culture;
     const sp = newChar({ fac: G.player, cul, g: r.g === 'L' ? 'P' : 'L', age: Math.max(16, age(r) - rint(3, 12)), adultTraits: true });
     r.sp = sp.id; sp.sp = r.id;
     if (kind === 'asing') { addRel(fid, 20); G.stats.marriages++; } else { addLegit(3); for (const n of nobles()) n.loy += 6; }
     checkBadges(); log(`${charName(r)} menikah dengan ${sp.n}.`, 'baik'); done(`${charName(r)} kini memiliki pendamping.`); },
-  vassalSign(){ if (!spend(0)) return; becomeVassal(); addLegit(-8); done('Perjanjian ditandatangani.'); },
-  prestige(){ if (!spend(COST.prestige())) return; addLegit(4); addIndep(6); addRel('belanda', -3); done('Upacara kebesaran keraton digelar.'); },
-  independence(){ if (P().indep < 50) return toast('Kemandirian belum cukup. Butuh minimal 50.'); if (!spend(0)) return; const ov = P().overlord; P().overlord = null; startWar(ov === 'jepang' ? 'jepang' : 'belanda', 'merdeka'); if (ov === 'jepang') { endWar('jepang', 'Jepang terlalu sibuk dengan perang Pasifik untuk menghukum istana.'); earn('merdeka'); } addLegit(8); done('Istana menyatakan lepas dari kekuasaan asing.'); },
+  vassalSign(){ if (!spend(0, 0)) return; becomeVassal(); addLegit(-8); done('Perjanjian ditandatangani.'); },
+  prestige(){ if (!spend(COST.prestige(), WIBAWA.prestige)) return; addLegit(4); addIndep(6); addRel('belanda', -3); done('Upacara kebesaran keraton digelar.'); },
+  independence(){ if (P().indep < 50) return toast('Kemandirian belum cukup. Butuh minimal 50.'); if (!spend(0, WIBAWA.independence)) return; const ov = P().overlord; P().overlord = null; startWar(ov === 'jepang' ? 'jepang' : 'belanda', 'merdeka'); if (ov === 'jepang') { endWar('jepang', 'Jepang terlalu sibuk dengan perang Pasifik untuk menghukum istana.'); earn('merdeka'); } addLegit(8); done('Istana menyatakan lepas dari kekuasaan asing.'); },
   tax(level){ P().tax = level; renderAll(); }
 };
 function done(msg){ toast(msg); checkBadges(); renderAll(); scheduleSave(); }
