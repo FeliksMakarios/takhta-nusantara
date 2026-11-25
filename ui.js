@@ -476,6 +476,8 @@ function renderStart(){
             <section><h3>Istana dan wangsa</h3><p>Raja menua dan wafat. Tetapkan pewaris, didik anak-anak sejak usia 6 tahun, dan nikahkan mereka untuk mempererat hubungan dengan kerajaan lain. Isi dewan kerajaan dengan orang yang cakap, dan awasi kesetiaan bangsawan agar tidak membelot.</p></section>
             <section><h3>Diplomasi dan perang</h3><p>Kirim hadiah, ajak bersekutu, atau nyatakan perang terhadap kerajaan tetangga. Pasukan hanya bisa menyerang wilayah yang dekat dengan wilayahmu. Wilayah adat bisa dirangkul dengan damai atau ditaklukkan.</p></section>
             <section><h3>Pasukan</h3><p>Pasukanmu tampil sebagai panji di peta. Klik panji, lalu klik wilayah tujuan. Perjalanan darat dan laut butuh waktu. Wilayah musuh dikepung dulu, lalu diserbu. Bila pasukan yang bermusuhan bertemu, terjadi pertempuran, dan yang kalah mundur. Pasukan bisa dipecah, digabung, dan dipulangkan.</p></section>
+            <section><h3>Intrik istana</h3><p>Kerabat dan bangsawan bisa berkomplot merebut takhta, meracun pewaris, atau berkhianat kepada Belanda. Angkat telik sandi yang cakap, selidiki istana, dan jaga kesetiaan dengan gelar dan tanah. Tokoh istana juga mengajukan usul, dan menolak usul membuat mereka kecewa.</p></section>
+            <section><h3>Peristiwa sejarah</h3><p>Setiap kerajaan punya rangkaian peristiwanya sendiri, seperti Perang Aceh, Perang Banjar, atau puputan di Bali. Tokoh sejarah bergabung ke istana pada waktunya, dan pilihanmu menentukan jalan ceritanya. Setelah 1908, tokoh pergerakan dari sekolah-sekolahmu ikut menyuarakan gagasan kebangsaan.</p></section>
             <section><h3>Persekutuan</h3><p>Sekutu diminta ikut berperang setiap kali perang pecah, lalu membantu bertahan, ikut menyerang, dan merebut wilayah musuh. Sekutu yang menolak memutus persekutuan. Sebaliknya, sekutu bisa meminta bantuanmu, dan sekutu musuh bisa ikut menyerangmu.</p></section>
             <section><h3>Perdagangan</h3><p>Perjanjian dagang menambah penghasilan setiap bulan. Jumlah jalur dagang tergantung banyaknya wilayah pesisir. Berdagang dengan Belanda aman tetapi mengikis kemandirian, sedangkan berdagang dengan Inggris di Singapura lebih menguntungkan tetapi membuat Belanda curiga.</p></section>
             <section><h3>Koalisi</h3><p>Setiap penaklukan menaikkan kecurigaan tetangga. Bila terlalu tinggi, mereka membentuk koalisi dan menyerangmu bersama-sama. Kecurigaan turun perlahan selama kamu tidak berperang.</p></section>
@@ -623,9 +625,20 @@ function tabWilayah(){
 function personCard(c, role){
   if (!c) return '';
   return `<div class="person"><div class="pn">${esc(charName(c))}${c.hist ? ' <span class="chip gold">Tokoh sejarah</span>' : ''}</div><div class="pr">${esc(role)}, ${age(c)} tahun${c.bp ? ' (tahun lahir perkiraan)' : ''}${c.full && P().ruler === c.id ? `. ${esc(c.full)}` : ''}</div>
-    <div class="pstats"><span title="Kepemimpinan perang">Perang ${stat(c, 'mil')}</span><span title="Diplomasi">Diplomasi ${stat(c, 'dip')}</span><span title="Tata kelola">Kelola ${stat(c, 'adm')}</span></div>
+    <div class="pstats"><span title="Kepemimpinan perang">Perang ${stat(c, 'mil')}</span><span title="Diplomasi">Diplomasi ${stat(c, 'dip')}</span><span title="Tata kelola">Kelola ${stat(c, 'adm')}</span><span title="Tipu daya">Tipu daya ${stat(c, 'itr')}</span></div>
+    ${socialChips(c)}
     ${c.tr.length ? `<div class="traits">${c.tr.map(t => `<span class="chip ${GOOD_TRAITS.includes(t) ? 'ok' : 'warn'}" title="${esc(TRAITS[t].d)}">${esc(TRAITS[t].n)}</span>`).join('')}</div>` : ''}</div>`;
 }
+function socialChips(c){
+  const out = [];
+  if (c.perg) out.push('<span class="chip gold">Tokoh pergerakan</span>');
+  if (c.friend && CH(c.friend) && CH(c.friend).alive) out.push(`<span class="chip ok">Sahabat ${esc(CH(c.friend).id === P().ruler ? 'raja' : CH(c.friend).n)}</span>`);
+  if (c.rival && CH(c.rival) && CH(c.rival).alive) out.push(`<span class="chip warn">Seteru ${esc(CH(c.rival).id === P().ruler ? 'raja' : CH(c.rival).n)}</span>`);
+  if (c.scheme && c.scheme.found) out.push(`<span class="chip danger">Berkomplot ${esc(SCHEMES[c.scheme.type].n)}</span>`);
+  if (c.away) out.push('<span class="chip">Sedang menjalankan siasat</span>');
+  return out.length ? `<div class="traits">${out.join('')}</div>` : '';
+}
+function courtBtns(c){ return `<div class="drow"><button class="btn sm ghost" data-a="anugerah:${c.id}">Anugerahi gelar ${C(80)} f</button><button class="btn sm ghost danger" data-a="asingkanAsk:${c.id}">Asingkan</button></div>`; }
 function tabIstana(){
   const f = P(), r = rulerC(), sp = CH(r?.sp), h = heirC();
   const fam = family().filter(c => c.id !== f.ruler).sort((a, b) => a.b - b.b);
@@ -637,12 +650,13 @@ function tabIstana(){
     const can = a >= 15 && a <= 32 && !c.sp && !c.hist;
     return `<li><div><b>${esc(charName(c))}</b>${c.hist ? ' <span class="chip gold">Tokoh sejarah</span>' : ''} <span class="small">${c.g === 'L' ? 'laki-laki' : 'perempuan'}, ${a} tahun${c.bp ? ' (perkiraan)' : ''}${c.sp && CH(c.sp)?.alive ? ', menikah' : ''}</span></div>
       ${c.tr.length ? `<div class="traits">${c.tr.map(t => `<span class="chip ${GOOD_TRAITS.includes(t) ? 'ok' : 'warn'}">${esc(TRAITS[t].n)}</span>`).join('')}</div>` : ''}
-      ${edu}${can ? `<button class="btn sm ghost" data-a="marryOpen:${c.id}">Jodohkan</button>` : ''}</li>`;
+      ${socialChips(c)}${a >= 16 ? `<span class="small">Kesetiaan ${Math.round(c.loy)} ${bar(c.loy, c.loy < 25 ? 'red' : 'gold')}</span>` : ''}
+      ${edu}${can ? `<button class="btn sm ghost" data-a="marryOpen:${c.id}">Jodohkan</button>` : ''}${a >= 16 ? courtBtns(c) : ''}</li>`;
   }).join('');
   const cands = councilCandidates();
   const seat = (k, label, st) => `<div class="seat"><div class="sl">${label}</div><select data-c="seat:${k}"><option value="">Kosong</option>
-    ${cands.map(c => `<option value="${c.id}" ${f.council[k] === c.id ? 'selected' : ''}>${esc(charName(c))} (${st} ${stat(c, st === 'Perang' ? 'mil' : st === 'Kelola' ? 'adm' : 'dip')})</option>`).join('')}</select></div>`;
-  const nob = nobles().sort((a, b) => a.loy - b.loy).map(c => `<li><span>${esc(charName(c))}${c.hist ? ' <span class="chip gold">Tokoh sejarah</span>' : ''} <span class="small">${age(c)} tahun</span></span><span class="loy">${Math.round(c.loy)} ${bar(c.loy, c.loy < 25 ? 'red' : 'gold')}</span></li>`).join('');
+    ${cands.filter(c => !c.away).map(c => `<option value="${c.id}" ${f.council[k] === c.id ? 'selected' : ''}>${esc(charName(c))} (${st} ${stat(c, st === 'Perang' ? 'mil' : st === 'Kelola' ? 'adm' : st === 'Tipu daya' ? 'itr' : 'dip')})</option>`).join('')}</select></div>`;
+  const nob = nobles().sort((a, b) => a.loy - b.loy).map(c => `<li class="nobrow"><div class="nobtop"><span>${esc(charName(c))}${c.hist ? ' <span class="chip gold">Tokoh sejarah</span>' : ''} <span class="small">${age(c)} tahun, tipu daya ${stat(c, 'itr')}</span></span><span class="loy">${Math.round(c.loy)} ${bar(c.loy, c.loy < 25 ? 'red' : 'gold')}</span></div>${socialChips(c)}${courtBtns(c)}</li>`).join('');
   return `<section class="card">
       <h3>Penguasa</h3>
       ${personCard(r, 'Penguasa')}
@@ -653,8 +667,12 @@ function tabIstana(){
     </section>
     <section class="card"><h3>Wangsa</h3><ul class="fam">${famRows || '<li class="small">Belum ada anggota wangsa lain.</li>'}</ul></section>
     <section class="card"><h3>Dewan kerajaan</h3>
-      ${seat('panglima', 'Panglima perang', 'Perang')}${seat('patih', 'Patih (tata kelola)', 'Kelola')}${seat('duta', 'Juru runding', 'Diplomasi')}
-      <p class="small">Panglima menambah kekuatan tempur. Patih menambah penghasilan dan wibawa. Juru runding memperbesar peluang diplomasi.</p>
+      ${seat('panglima', 'Panglima perang', 'Perang')}${seat('patih', 'Patih (tata kelola)', 'Kelola')}${seat('duta', 'Juru runding', 'Diplomasi')}${seat('telik', 'Telik sandi', 'Tipu daya')}
+      <p class="small">Panglima menambah kekuatan tempur. Patih menambah penghasilan dan wibawa. Juru runding memperbesar peluang diplomasi. Telik sandi membongkar komplotan di istana.</p>
+    </section>
+    <section class="card"><h3>Siasat istana</h3>
+      <p class="small">Kerabat dan bangsawan yang ambisius atau tidak setia bisa berkomplot merebut takhta, meracun pewaris, atau berkhianat kepada Belanda. Telik sandi yang cakap membongkar komplotan lebih cepat. Gelar dan tanah menaikkan kesetiaan.</p>
+      <div class="acts">${actRow('Selidiki istana', 'Kerahkan telik sandi untuk mencari komplotan tersembunyi.', null, 'intrik:selidiki', false, '5 wibawa')}</div>
       <h3>Kesetiaan bangsawan</h3><ul class="nob">${nob}</ul></section>`;
 }
 
@@ -852,6 +870,9 @@ function handleAction(a){
     case 'music': MUSIC.toggle(); break;
     case 'tutorial': startTutorial(); break;
     case 'saveslot': saveSlotsOpen(); break;
+    case 'intrik': INTRIK[x](); break;
+    case 'anugerah': INTRIK.anugerah(x); break;
+    case 'asingkanAsk': confirmBox(`Asingkan ${charName(CH(+x))}?`, 'Ia akan meninggalkan istana. Legitimasi turun, dan kerabat lain bisa tersinggung.', 'Asingkan', () => INTRIK.asingkan(x)); break;
     case 'pause': togglePause(); break;
     case 'speed': setSpeed(+x); break;
     case 'ending': showEnding(); break;
