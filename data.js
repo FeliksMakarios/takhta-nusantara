@@ -194,7 +194,7 @@ const CULTURES = {
            f:['Galuh','Nur Alam','Kumala Sari','Intan','Salamah','Jamilah'],
            pm:'Pangeran', pf:'Ratu', nm:'Kiai Adipati', nf:'Gusti', place:'Banjar' },
   bali:{ m:['Gede Agung','Putu Jelantik','Made Oka','Nyoman Rai','Ketut Anom','Gede Sakti','Putu Kusuma','Made Kaler','Gede Raka','Ketut Ngurah'],
-         f:['Ayu Kencana','Istri Kanya','Ayu Mas','Istri Sayang','Ayu Rai','Istri Agung'],
+         f:['Ayu Kencana','Ayu Mas','Istri Sayang','Ayu Rai','Istri Agung','Ayu Puspa','Istri Mirah'],
          pm:'Cokorda', pf:'Dewa Ayu', nm:'I Gusti', nf:'I Gusti Ayu', place:'Bali' },
   melayu:{ m:['Ismail','Hasyim','Kasim','Ali','Abdul Jalil','Said','Yahya','Muhammad','Usman','Mahmud','Abdul Rahman'],
            f:['Fatimah','Mahrum','Latifah','Zubaidah','Embung','Aminah','Rugayah'],
@@ -392,10 +392,12 @@ const TRAITS = {
   pemarah:{n:'Pemarah', d:'Diplomasi -2', dip:-2},
   pembaharu:{n:'Pembaharu', d:'Sekolah lebih murah, mutu pasukan lebih mudah naik', reform:true},
   serakah:{n:'Serakah', d:'Kesetiaan bangsawan turun setiap tahun', greed:true},
-  lemah:{n:'Sakit-sakitan', d:'Umur lebih pendek', frail:true}
+  lemah:{n:'Sakit-sakitan', d:'Umur lebih pendek', frail:true},
+  licik:{n:'Licik', d:'Tipu daya +2', itr:2},
+  ambisius:{n:'Ambisius', d:'Lebih mudah tergoda berkomplot'}
 };
-const GOOD_TRAITS = ['cakap_perang','cerdik','cermat','saleh','berwibawa','pemberani','pembaharu'];
-const BAD_TRAITS = ['peragu','boros','pemarah','serakah','lemah'];
+const GOOD_TRAITS = ['cakap_perang','cerdik','cermat','saleh','berwibawa','pemberani','pembaharu','licik'];
+const BAD_TRAITS = ['peragu','boros','pemarah','serakah','lemah','ambisius'];
 
 const BADGES = {
   tahun1:{n:'Titah Pertama', d:'Menyelesaikan tahun pertama pemerintahan.', g:'I'},

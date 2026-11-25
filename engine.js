@@ -92,8 +92,9 @@ function newChar(o){
   const c = {
     id: G.nextId++, n: o.n || pick(g === 'L' ? cul.m : cul.f), g, b: o.b ?? (G.year - (o.age ?? 0)), cul: o.cul,
     fac: o.fac, dyn: !!o.dyn, noble: !!o.noble, par: o.par || null, sp: null, alive: true, out: false,
-    mil: o.mil ?? rint(2, 8), dip: o.dip ?? rint(2, 8), adm: o.adm ?? rint(2, 8), tr: [], loy: o.loy ?? rint(35, 75), edu: null, eduDone: false
+    mil: o.mil ?? rint(2, 8), dip: o.dip ?? rint(2, 8), adm: o.adm ?? rint(2, 8), itr: o.itr ?? rint(2, 8), tr: [], loy: o.loy ?? rint(35, 75), edu: null, eduDone: false
   };
+  c.bias = rint(-25, 15);
   if (o.traits) c.tr = o.traits.slice();
   else if ((o.age ?? 0) >= 16 || o.adultTraits) c.tr = [chance(0.65) ? pick(GOOD_TRAITS) : pick(BAD_TRAITS)];
   G.chars[c.id] = c;
@@ -115,7 +116,7 @@ function charName(c){
   if (c.noble) return `${c.g === 'L' ? cul.nm : cul.nf} ${c.n}`;
   return c.n;
 }
-const stat = (c, k) => !c ? 0 : clamp(c[k] + c.tr.reduce((s, t) => s + (TRAITS[t][k] || 0), 0), 0, 12);
+const stat = (c, k) => !c ? 0 : clamp((c[k] ?? 5) + c.tr.reduce((s, t) => s + ((TRAITS[t] || {})[k] || 0), 0), 0, 12);
 const hasTrait = (c, t) => c && c.tr.includes(t);
 
 function newGame(fid){
@@ -133,7 +134,7 @@ function newGame(fid){
     const pop = Object.values(MAP.regions).filter(r => r.owner0 === id).reduce((s, r) => s + r.pop0, 0);
     G.fac[id] = {
       id, kas: d.kas ?? 300, army: d.army ?? Math.round(pop * 6), quality: d.quality ?? 0.8, overlord: d.overlord || null,
-      ruler: null, heir: null, council: { panglima: null, patih: null, duta: null }, tax: 1, regnalN: d.startRegnal || 1,
+      ruler: null, heir: null, council: { panglima: null, patih: null, duta: null, telik: null }, tax: 1, regnalN: d.startRegnal || 1,
       cap: d.capital, indep: d.overlord ? 45 : 100, rulerName: null, legit: 60
     };
   }
@@ -226,7 +227,8 @@ function isRegency(){ const r = rulerC(); return r && age(r) < 16; }
 
 function autoCouncil(){
   const f = P(); const used = new Set();
-  for (const [seat, k] of [['panglima','mil'],['patih','adm'],['duta','dip']]) {
+  if (f.council.telik === undefined) f.council.telik = null;
+  for (const [seat, k] of [['panglima','mil'],['patih','adm'],['duta','dip'],['telik','itr']]) {
     const cur = CH(f.council[seat]);
     if (cur && cur.alive && !cur.out && cur.id !== f.ruler) { used.add(cur.id); continue; }
     const c = councilCandidates().filter(x => !used.has(x.id)).sort((a, b) => stat(b, k) - stat(a, k))[0];
@@ -733,6 +735,9 @@ function monthly(){
 
   monthlyCharacters();
   if (G.over) return;
+  monthlyIntrigue();
+  monthlyStories();
+  if (G.over) return;
 
   for (const [id, F] of Object.entries(G.fac)) {
     if (id === G.player || D(id).kind !== 'kerajaan' || !alive(id)) continue;
@@ -810,9 +815,12 @@ function monthlyCharacters(){
     }
   }
   histBirths();
-  for (const c of nobles()) {
+  for (const c of court()) {
+    if (c.id === f.ruler || c.id === (r && r.sp) || age(c) < 16) continue;
     const seat = Object.values(f.council).includes(c.id);
-    const t = 45 + (f.legit ?? 60) * 0.25 + TAX[f.tax].loy + (seat ? 10 : 0) - (hasTrait(r, 'serakah') ? 10 : 0) - (G.rel.belanda < 0 ? 6 : 0);
+    const passed = c.dyn && c.g === 'L' && age(c) >= 25 && c.id !== f.heir && c.par === (r && r.par) ? 10 : 0;
+    const t = 45 + (f.legit ?? 60) * 0.25 + TAX[f.tax].loy + (seat ? 10 : 0) - (hasTrait(r, 'serakah') ? 10 : 0) - (G.rel.belanda < 0 && c.noble ? 6 : 0)
+      + (c.bias || 0) - passed - (c.rival === f.ruler ? 15 : 0) + (c.friend === f.ruler ? 15 : 0) + (c.id === f.heir ? 10 : 0);
     c.loy = clamp(c.loy + (t - c.loy) * 0.025 + (rand() - 0.55) * 2.5, 0, 100);
   }
   autoCouncilFill();
@@ -836,6 +844,7 @@ function histBirths(){
 }
 
 function yearlyCharacters(){
+  yearlyIntrigue();
   for (const c of family()) {
     if (age(c) >= 16 && !c.eduDone) {
       c.eduDone = true;

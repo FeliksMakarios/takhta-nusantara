@@ -12,6 +12,8 @@ Kamu bisa membuat persekutuan militer dan perjanjian dagang (termasuk dengan Bel
 
 Pasukan tampil sebagai panji di peta: pilih pasukan, klik wilayah tujuan, kepung, lalu serbu. Ekspedisi Belanda dan pasukan kerajaan musuh juga bergerak di peta. Tersedia tutorial langkah demi langkah, tiga slot simpanan, dan musik gamelan yang dibuat langsung di peramban.
 
+Setiap kerajaan punya rantai peristiwa sejarahnya sendiri (misalnya Perang Aceh bersama Teuku Umar dan Cut Nyak Dhien, Perang Banjar, atau Puputan di Bali), ditambah peristiwa nasional seperti lahirnya PNI dan BPUPKI. Di istana, kerabat dan bangsawan yang ambisius atau tidak setia bisa berkomplot, sementara telik sandi membantu membongkarnya. Para tokoh juga sesekali mengajukan usulan kepada raja.
+
 ## Isi repositori
 
 - `index.html`: tampilan dan gaya halaman
@@ -20,6 +22,8 @@ Pasukan tampil sebagai panji di peta: pilih pasukan, klik wilayah tujuan, kepung
 - `tools/build-map.js`: pembuat `map-data.js` dari garis pantai Natural Earth
 - `engine.js`: aturan permainan (ekonomi, tokoh, diplomasi, Belanda, peristiwa)
 - `armies.js`: pasukan di peta, pengepungan, dan pertempuran
+- `kisah.js`: rantai peristiwa sejarah per kerajaan dan peristiwa nasional
+- `intrik.js`: komplotan, kudeta, pengkhianatan, dan usulan para tokoh istana
 - `ui.js`: tampilan peta dan panel, penyimpanan kemajuan
 - `extras.js`: slot simpanan, tutorial, dan musik gamelan
 - `assets/`: ilustrasi
